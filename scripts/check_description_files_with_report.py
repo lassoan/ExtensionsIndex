@@ -312,7 +312,7 @@ def main():
     parser.add_argument("--output-format", choices=["console", "markdown"], default="console", 
                        help="Output format for the report")
     parser.add_argument("--output-file", help="File to write the report to (only for markdown format)")
-    parser.add_argument("/path/to/extension_name.json", nargs='*')
+    parser.add_argument("extension_files", nargs='*', help="Extension JSON files to validate")
     args = parser.parse_args()
 
     checks = []
@@ -347,7 +347,7 @@ def main():
         # Keep track extension errors removing duplicates
         return extension_name, list(set(failures))
 
-    file_paths = getattr(args, "/path/to/extension_name.json")
+    file_paths = args.extension_files
     with parallel_backend("threading", n_jobs=6):
         jobs = Parallel(verbose=False)(
             delayed(_check_extension)(file_path)

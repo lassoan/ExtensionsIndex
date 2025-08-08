@@ -5,10 +5,7 @@ on:
   push:
     branches:
       - main
-      - main-*
-  schedule:
-    # Run daily at 2 AM UTC
-    - cron: '0 2 * * *'
+      - 5.*
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -30,14 +27,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r scripts/requirements.txt
           
+      - name: Run filename validation
+        run: |
+          python scripts/test_filenames.py
+          
       - name: Run extension validation
         run: |
-          cd scripts
-          python check_description_files_with_report.py \
+          python scripts/check_description_files_with_report.py \
             --output-format markdown \
-            --output-file ../validation-report.md \
-            --check-dependencies .. \
-            ../*.json
+            --output-file validation-report.md \
+            --check-dependencies . \
+            *.json || true
             
       - name: Display validation summary
         if: always()

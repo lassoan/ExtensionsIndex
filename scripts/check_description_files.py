@@ -163,8 +163,8 @@ def check_dependencies(directory):
 def main():
     parser = argparse.ArgumentParser(
         description='Validate extension description files.')
-    parser.add_argument("-d", "--check-dependencies", help="Check all extension dsecription files in the provided folder.")
-    parser.add_argument("/path/to/extension_name.json", nargs='*')
+    parser.add_argument("-d", "--check-dependencies", help="Check all extension description files in the provided folder.")
+    parser.add_argument("extension_files", nargs='*', help="Extension JSON files to validate")
     args = parser.parse_args()
 
     checks = []
@@ -199,7 +199,7 @@ def main():
         # Keep track extension errors removing duplicates
         return extension_name, list(set(failures))
 
-    file_paths = getattr(args, "/path/to/extension_name.json")
+    file_paths = args.extension_files
     with parallel_backend("threading", n_jobs=6):
         jobs = Parallel(verbose=False)(
             delayed(_check_extension)(file_path)

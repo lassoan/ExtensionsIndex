@@ -1,7 +1,0 @@
-{
-  "build_dependencies": [],
-  "build_subdirectory": ".",
-  "scm_revision": "main",
-  "scm_url": "https://github.com/example/TestExtension",
-  "tier": 1
-}
