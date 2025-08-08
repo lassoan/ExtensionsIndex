@@ -12,6 +12,9 @@ import textwrap
 import urllib.request
 import urllib.parse as urlparse
 import subprocess
+import re
+import tempfile
+import shutil
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
@@ -90,9 +93,10 @@ def parse_json(ext_file_path):
 
 
 @require_metadata_key("category")
-def check_category(*_unused_args):
-    pass
-
+def check_category(extension_name, metadata):
+    category = metadata["category"]
+    if category not in ACCEPTED_EXTENSION_CATEGORIES:
+        raise ExtensionCheckError(extension_name, "check_category", f"Category '{category}' is unknown. Consider using any of the known extensions instead: {', '.join(ACCEPTED_EXTENSION_CATEGORIES)}")
 
 @require_metadata_key("scm_url")
 def check_scm_url_syntax(extension_name, metadata):
@@ -132,6 +136,73 @@ def check_git_repository_name(extension_name, metadata):
             """ % (
                 repo_name, repo_name, variations)))
 
+def clone_repository(scm_url, scm_revision):
+    """Clone a git repository to a temporary directory."""
+    temp_dir = tempfile.mkdtemp(prefix="extension_check_")
+    try:
+        if scm_revision:
+            subprocess.run(
+                ['git', 'clone', scm_url, temp_dir],
+                check=True, capture_output=True, text=True, timeout=120)
+            subprocess.run(
+                ['git', 'checkout', scm_revision],
+                cwd=temp_dir,
+                check=True, capture_output=True, text=True, timeout=30)
+        else:
+            subprocess.run(
+                ['git', 'clone', '--depth', '1', scm_url, temp_dir],
+                check=True, capture_output=True, text=True, timeout=60)
+        return temp_dir
+    except subprocess.TimeoutExpired as e:
+        raise ExtensionCheckError("unknown", "clone_repository", f"Git clone operation timed out: {e}")
+    except subprocess.CalledProcessError as e:
+        raise ExtensionCheckError("unknown", "clone_repository", f"Failed to clone repository: {e.stderr.strip() if e.stderr else 'Unknown git error'}")
+    except FileNotFoundError:
+        raise ExtensionCheckError("unknown", "clone_repository", "Git command not found. Please ensure git is installed and in PATH")
+
+def check_extension_repository_content(extension_name, metadata, cloned_repository_folder=None):
+    """Check if the top-level CMakeLists.txt file project name matches the extension name."""
+    check_name = "check_extension_repository_content"
+
+    # Look for CMakeLists.txt in the cloned repository
+    if not cloned_repository_folder:
+        raise ExtensionCheckError(
+            extension_name, check_name,
+            "Repository is not available.")
+    cmake_file_path = os.path.join(cloned_repository_folder, "CMakeLists.txt")
+    if not os.path.isfile(cmake_file_path):
+        raise ExtensionCheckError(
+            extension_name, check_name,
+            "CMakeLists.txt file not found in repository root")
+    
+    # Read and parse CMakeLists.txt
+    try:
+        with open(cmake_file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            cmake_content = f.read()
+    except Exception as e:
+        raise ExtensionCheckError(
+            extension_name, check_name,
+            f"Failed to read CMakeLists.txt: {str(e)}")
+    
+    # Parse CMakeLists.txt to find project() declaration
+    # Look for patterns like: project(ExtensionName) or project(ExtensionName VERSION ...)
+    # Handle multi-line project declarations and various whitespace
+    project_pattern = r'project\s*\(\s*([^\s\)\n\r]+)'
+    matches = re.findall(project_pattern, cmake_content, re.IGNORECASE | re.MULTILINE)
+    
+    if not matches:
+        raise ExtensionCheckError(
+            extension_name, check_name,
+            "No project() declaration found in CMakeLists.txt")
+    
+    cmake_project_name = matches[0].strip().strip('"').strip("'")
+    
+    # Check if the project name matches the extension name
+    if cmake_project_name != extension_name:
+        raise ExtensionCheckError(
+            extension_name, check_name,
+            f"CMakeLists.txt project name '{cmake_project_name}' does not match extension name '{extension_name}'")
+
 def check_dependencies(directory):
     import os
     required_extensions = {}  # for each extension it contains a list of extensions that require it
@@ -168,17 +239,46 @@ def check_dependencies(directory):
     if errors_found:
         raise ExtensionDependencyError(errors_found)
 
+def print_categories(directory):
+    import os
+    extensions_for_categories = {}  # for each category it contains a list of extensions
+    for filename in os.listdir(directory):
+        f = os.path.join(directory, filename)
+        if not os.path.isfile(f) or not filename.endswith(".json"):
+            continue
+        extension_name, extension = os.path.splitext(os.path.basename(filename))
+        if extension != ".json":
+            continue
+        try:
+            extension_description = parse_json(f)
+        except ExtensionParseError as exc:
+            print(exc)
+            continue
+        category = extension_description.get("category", "")
+        if not category:
+            continue
+        if extensions_for_categories.get(category) is None:
+            extensions_for_categories[category] = []
+        extensions_for_categories[category].append(extension_name)
+    print(f"[\n{'\n'.join(f'    "{category}",' for category in sorted(extensions_for_categories.keys()))}\n]")
+
 def main():
     parser = argparse.ArgumentParser(
         description='Validate extension description files.')
     parser.add_argument("--extension-descriptions-folder", help="Folder containing extension description files")
     parser.add_argument("--report-file", help="Write report to markdown file")
     parser.add_argument("extension_description_files", nargs='*', help="Extension JSON files to validate")
+    parser.add_argument("--print-categories", action='store_true',
+                        help="Print categories of extensions in the specified folder")
     args = parser.parse_args()
 
     extension_descriptions_folder = "."
     if args.extension_descriptions_folder:
         extension_descriptions_folder = args.extension_descriptions_folder
+
+    if args.print_categories:
+        print_categories(extension_descriptions_folder)
+        return 0
 
     success = True
 
@@ -206,11 +306,6 @@ def main():
             with open(args.report_file, 'a', encoding='utf-8') as f:
                 f.write(f"{markdown_message_prefix}{message}\n")
 
-    extension_description_checks = [
-        ("Check category", check_category, {}),
-        ("Check git repository name", check_git_repository_name, {}),
-        ("Check SCM URL syntax", check_scm_url_syntax, {}),
-        ]
     failed_extensions = set()
     for file_path in args.extension_description_files:
         file_extension = os.path.splitext(file_path)[1]
@@ -229,27 +324,57 @@ def main():
             metadata = parse_json(file_path)
             url = metadata.get("scm_url", "").strip()
             _log_message(f"Repository URL: {url}")
-            _log_message("Parsed extension description file successfully", "success")
         except ExtensionParseError as exc:
             _log_message(f"Failed to parse extension description file: {exc}", "error")
             success = False
             failed_extensions.add(extension_name)
             continue
 
+        cloned_repository_folder = None
+        try:
+            cloned_repository_folder = clone_repository(metadata["scm_url"], metadata.get("scm_revision", ""))
+            print(f"Cloned repository to {cloned_repository_folder}")
+
+            # Log the top-level CMakeLists.txt file content
+            cmake_file_path = os.path.join(cloned_repository_folder, "CMakeLists.txt")
+            if os.path.isfile(cmake_file_path):
+                with open(cmake_file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    cmake_content = f.read()
+                _log_message(f"Top-level CMakeLists.txt content:\n```\n{cmake_content}```\n")
+        except ExtensionCheckError as exc:
+            _log_message(f"Failed to clone repository: {exc}", "error")
+            success = False
+            failed_extensions.add(extension_name)
+
+        extension_description_checks = [
+            ("Check category", check_category, {}),
+            ("Check git repository name", check_git_repository_name, {}),
+            ("Check SCM URL syntax", check_scm_url_syntax, {}),
+            ("Check repository content", check_extension_repository_content, {"cloned_repository_folder": cloned_repository_folder}),
+            ]
         for check_description, check, check_kwargs in extension_description_checks:
             try:
-                check(extension_name, metadata, **check_kwargs)
+                details = check(extension_name, metadata, **check_kwargs)
                 _log_message(f"{check_description} completed successfully", "success")
+                if details:
+                    _log_message(details)
             except ExtensionCheckError as exc:
                 _log_message(f"{check_description} failed: {exc}", "error")
                 failed_extensions.add(extension_name)
                 success = False
 
+        # Clean up temporary directory
+        if cloned_repository_folder and os.path.exists(cloned_repository_folder):
+            try:
+                shutil.rmtree(cloned_repository_folder)
+            except Exception:
+                print(f"Failed to clean up cloned repository folder: {cloned_repository_folder}")
+
     if args.extension_description_files and len(args.extension_description_files) > 1:
         _log_message("## Extensions test summary")
         _log_message(f"Checked {len(args.extension_description_files)} extension description files.")
         if failed_extensions:
-            _log_message(f"Failed extensions: {', '.join(failed_extensions)}", "error")
+            _log_message(f"Checks failed for {len(failed_extensions)} extensions: {', '.join(failed_extensions)}", "error")
 
     try:
         _log_message("## Extension dependencies")
@@ -259,7 +384,7 @@ def main():
         _log_message(f"Dependency check failed: {exc}", "error")
         success = False
 
-    sys.exit(0 if success else 1)
+    return 0 if success else 1
 
 
 REPOSITORY_NAME_CHECK_EXCEPTIONS = [
@@ -322,6 +447,68 @@ REPOSITORY_NAME_CHECK_EXCEPTIONS = [
     "VASSTAlgorithms",
 ]
 
+ACCEPTED_EXTENSION_CATEGORIES = [
+    "Active Learning",
+    "Analysis",
+    "Auto3dgm",
+    "BigImage",
+    "Cardiac",
+    "Chest Imaging Platform",
+    "Conda",
+    "Converters",
+    "DICOM",
+    "DSCI",
+    "Developer Tools",
+    "Diffusion",
+    "Examples",
+    "Exporter",
+    "FTV Segmentation",
+    "Filtering",
+    "Filtering.Morphology",
+    "Filtering.Vesselness",
+    "Holographic Display",
+    "IGT",
+    "Informatics",
+    "Netstim",
+    "Neuroimaging",
+    "Nuclear Medicine",
+    "Orthodontics",
+    "Osteotomy Planning",
+    "Otolaryngology",
+    "Photogrammetry",
+    "Pipelines",
+    "Planning",
+    "Printing",
+    "Quantification",
+    "Radiotherapy",
+    "Registration",
+    "Remote",
+    "Rendering",
+    "SPHARM",
+    "Segmentation",
+    "Sequences",
+    "Shape Analysis",
+    "Shape Regression",
+    "Shape Visualization",
+    "Simulation",
+    "SlicerCMF",
+    "SlicerMorph",
+    "Spectral Imaging",
+    "Supervisely",
+    "Surface Models",
+    "SurfaceLearner",
+    "Tomographic Reconstruction",
+    "Tracking",
+    "Tractography",
+    "Training",
+    "Ultrasound",
+    "Utilities",
+    "Vascular Modeling Toolkit",
+    "Virtual Reality",
+    "VisSimTools",
+    "Web System Tools",
+    "Wizards",
+]
 
 if __name__ == "__main__":
     main()
