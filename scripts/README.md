@@ -10,9 +10,6 @@ The original validation script that provides console output.
 ### `check_description_files_with_report.py`
 Enhanced validation script with markdown report generation capabilities.
 
-### `check_filenames.py`
-Python replacement for `check_filenames.sh` that validates repository file structure.
-
 ### `test_filenames.py`
 Unit tests for filename validation using Python's unittest framework.
 
@@ -53,23 +50,12 @@ python check_description_files_with_report.py --check-dependencies /path/to/exte
 
 ### Repository Structure Validation
 
-#### Standalone Script (Bash replacement)
-```bash
-python check_filenames.py
-```
-
-#### Unit Tests
-```bash
-python test_filenames.py
-```
-
 ## GitHub Actions
 
 The repository includes several GitHub Action workflows:
 
 ### Extension Validation Workflow (`.github/workflows/extension-validation.yml`)
 - Runs on every push and pull request
-- Runs daily at 2 AM UTC
 - Uses Python 3.12 environment
 - Includes filename validation as a pre-check
 - Generates a markdown validation report

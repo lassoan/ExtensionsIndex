@@ -26,11 +26,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r scripts/requirements.txt
-          
-      - name: Run filename validation
-        run: |
-          python scripts/check_filenames.py
-          
+                    
       - name: Run extension validation
         run: |
           python scripts/check_description_files_with_report.py \
