@@ -104,7 +104,7 @@ def main():
         else:
             print("Repository structure validation passed.")
     
-    print(f"Total unexpected files found: {len(unexpected_files)}")
+        print(f"Total unexpected files found: {len(unexpected_files)}")
     
     # Exit with error code if issues found
     sys.exit(len(unexpected_files))

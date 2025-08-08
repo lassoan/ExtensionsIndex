@@ -403,33 +403,32 @@ def main():
                 _log_message(f"Top-level CMakeLists.txt content:\n```\n{cmake_content}```\n")
             
             # Log the LICENSE.txt file content
+
             license_file_path = os.path.join(cloned_repository_folder, "LICENSE.txt")
-            license_file_found = None
-            if os.path.isfile(license_file_path):
-                license_file_found = license_file_path
-            else:
-                # Check for other common license file names
-                alternative_names = ["LICENSE", "License.txt", "license.txt", "COPYING", "COPYING.txt"]
-                for alt_name in alternative_names:
-                    alt_path = os.path.join(cloned_repository_folder, alt_name)
-                    if os.path.isfile(alt_path):
-                        license_file_found = alt_path
-                        break
+            license_file_path = None
+            license_file_names = ["LICENSE", "License.txt", "license.txt", "COPYING", "COPYING.txt"]
+            for license_file_name in license_file_names:
+                potential_path = os.path.join(cloned_repository_folder, license_file_name)
+                if os.path.isfile(potential_path):
+                    license_file_path = potential_path
+                    break
             
-            if license_file_found:
+            if license_file_path:
                 try:
-                    with open(license_file_found, 'r', encoding='utf-8', errors='ignore') as f:
+                    with open(license_file_path, 'r', encoding='utf-8', errors='ignore') as f:
                         license_content = f.read()
-                    license_filename = os.path.basename(license_file_found)
+                    license_filename = os.path.basename(license_file_path)
                     if len(license_content) > 1000:
                         license_content = license_content[:1000] + "\n...\n"
                     _log_message(f"License file ({license_filename}) content:\n```\n{license_content}```\n")
                 except Exception as e:
                     _log_message(f"Failed to read license file: {str(e)}", "error")
                     success = False
+                    failed_extensions.add(extension_name)
             else:
                 _log_message("No license file found in repository root", "error")
                 success = False
+                failed_extensions.add(extension_name)
 
         except ExtensionCheckError as exc:
             _log_message(f"Failed to clone repository: {exc}", "error")
