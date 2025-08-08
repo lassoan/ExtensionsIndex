@@ -82,22 +82,19 @@ def main():
     
     if args.output_format == "markdown":
         # Generate markdown report
-        print("# Repository Structure Validation Report")
-        print("")
-        print(f"**Total unexpected files/directories found:** {len(unexpected_files)}")
-        print("")
+        print(f"**Total unexpected files/directories found:** {len(unexpected_files)}\n")
         
         if not unexpected_files:
-            print("✅ **Repository structure validation passed!**")
+            print(":white_check_mark: **Repository structure validation passed!**")
             print("")
             print("All files and directories in the repository follow the expected structure.")
         else:
-            print("❌ **Repository structure issues found**")
+            print(":x: **Repository structure issues found**")
             print("")
             print("The following unexpected files or directories were found:")
             print("")
             for unexpected_file in unexpected_files:
-                print(f"- ❌ `{unexpected_file}`")
+                print(f"- :x: `{unexpected_file}`")
     else:
         # Console output
         if unexpected_files:

@@ -192,13 +192,13 @@ def main():
     def _log_message(message, message_type=None):
         plain_message_prefix = ""
         markdown_message_prefix = ""
-        if message_type is "error":
+        if message_type == "error":
             plain_message_prefix = "FAIL: "
             markdown_message_prefix = "- :x: "
-        elif message_type is "warning":
+        elif message_type == "warning":
             plain_message_prefix = "WARNING: "
             markdown_message_prefix = "- :warning: "
-        elif message_type is "success":
+        elif message_type == "success":
             plain_message_prefix = "PASS: "
             markdown_message_prefix = "- :white_check_mark: "
         print(f"{plain_message_prefix}{message}")
@@ -211,7 +211,7 @@ def main():
         ("Check git repository name", check_git_repository_name, {}),
         ("Check SCM URL syntax", check_scm_url_syntax, {}),
         ]
-    failed_extensions = []
+    failed_extensions = set()
     for file_path in args.extension_description_files:
         file_extension = os.path.splitext(file_path)[1]
         if file_extension != '.json':
@@ -233,7 +233,7 @@ def main():
         except ExtensionParseError as exc:
             _log_message(f"Failed to parse extension description file: {exc}", "error")
             success = False
-            failed_extensions.append(extension_name)
+            failed_extensions.add(extension_name)
             continue
 
         for check_description, check, check_kwargs in extension_description_checks:
@@ -242,17 +242,17 @@ def main():
                 _log_message(f"{check_description} completed successfully", "success")
             except ExtensionCheckError as exc:
                 _log_message(f"{check_description} failed: {exc}", "error")
-                failed_extensions.append(extension_name)
+                failed_extensions.add(extension_name)
                 success = False
 
     if args.extension_description_files and len(args.extension_description_files) > 1:
-        _log_message("## Extensions test summary", "info")
+        _log_message("## Extensions test summary")
         _log_message(f"Checked {len(args.extension_description_files)} extension description files.")
         if failed_extensions:
             _log_message(f"Failed extensions: {', '.join(failed_extensions)}", "error")
 
     try:
-        _log_message("## Extension dependencies", "info")
+        _log_message("## Extension dependencies")
         check_dependencies(extension_descriptions_folder)
         _log_message("Dependency check completed successfully", "success")
     except ExtensionDependencyError as exc:
