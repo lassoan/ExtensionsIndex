@@ -103,28 +103,28 @@ def parse_json(ext_file_path):
 def check_json_schema(extension_name, metadata):
     """Validate extension description JSON against its referenced schema."""
     check_name = "check_json_schema"
-    
+
     if not jsonschema or not requests:
         raise ExtensionCheckError(
             extension_name, check_name,
             "JSON schema validation requires 'jsonschema' and 'requests' packages. Install with: pip install jsonschema requests")
-    
+
     # Check if $schema is present
     if "$schema" not in metadata:
         raise ExtensionCheckError(
             extension_name, check_name,
             "No $schema field found in extension description")
-    
+
     schema_url = metadata["$schema"]
     if not schema_url:
         raise ExtensionCheckError(
             extension_name, check_name,
             "$schema field is empty")
-    
+
     # Remove fragment identifier if present (e.g., #/ at the end)
     if "#" in schema_url:
         schema_url = schema_url.split("#")[0]
-    
+
     try:
         # Download the schema
         response = requests.get(schema_url, timeout=30)
@@ -138,7 +138,7 @@ def check_json_schema(extension_name, metadata):
         raise ExtensionCheckError(
             extension_name, check_name,
             f"Invalid JSON schema at {schema_url}: {str(e)}")
-    
+
     try:
         # Validate the extension metadata against the schema
         jsonschema.validate(metadata, schema)
@@ -234,7 +234,7 @@ def check_cmakelists_content(extension_name, metadata, cloned_repository_folder=
         raise ExtensionCheckError(
             extension_name, check_name,
             "CMakeLists.txt file not found in repository root")
-    
+
     # Read and parse CMakeLists.txt
     try:
         with open(cmake_file_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -243,7 +243,7 @@ def check_cmakelists_content(extension_name, metadata, cloned_repository_folder=
         raise ExtensionCheckError(
             extension_name, check_name,
             f"Failed to read CMakeLists.txt: {str(e)}")
-    
+
     extension_name_in_cmake = None
 
     # Parse CMakeLists.txt to find project() declaration
@@ -271,7 +271,7 @@ def check_cmakelists_content(extension_name, metadata, cloned_repository_folder=
         raise ExtensionCheckError(
             extension_name, check_name,
             f"Extension name in CMakeLists.txt project name '{extension_name_in_cmake}' does not match extension description file name '{extension_name}'")
-    
+
     # Check extension icon URL
     # set(EXTENSION_ICONURL "https://raw.githubusercontent.com/jamesobutler/ModelClip/main/Resources/Icons/ModelClip.png")
     extension_icon_url = None
@@ -467,7 +467,7 @@ def main():
                 with open(cmake_file_path, 'r', encoding='utf-8', errors='ignore') as f:
                     cmake_content = f.read()
                 _log_message(f"Top-level CMakeLists.txt content:\n```\n{cmake_content}\n```\n")
-            
+
             # Log the LICENSE.txt file content
 
             license_file_path = os.path.join(cloned_repository_folder, "LICENSE.txt")
@@ -478,7 +478,7 @@ def main():
                 if os.path.isfile(potential_path):
                     license_file_path = potential_path
                     break
-            
+
             if license_file_path:
                 try:
                     with open(license_file_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -492,9 +492,12 @@ def main():
                     success = False
                     failed_extensions.add(extension_name)
             else:
-                _log_message("No license file found in repository root", "error")
-                success = False
-                failed_extensions.add(extension_name)
+                if extension_name in LICENSE_CHECK_EXCEPTIONS:
+                    _log_message(f"No license file found in repository root, but it is an exception for {extension_name}", "warning")
+                    success = False
+                    failed_extensions.add(extension_name)
+                else:
+                    _log_message("No license file found in repository root", "error")
 
         except ExtensionCheckError as exc:
             _log_message(f"Failed to clone repository: {exc}", "error")
@@ -603,6 +606,10 @@ REPOSITORY_NAME_CHECK_EXCEPTIONS = [
     "VASSTAlgorithms",
 ]
 
+LICENSE_CHECK_EXCEPTIONS = [
+    "3DMetricTools",
+    "ai-assisted-annotation-client",
+]
 ACCEPTED_EXTENSION_CATEGORIES = [
     "Active Learning",
     "Analysis",
