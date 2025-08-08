@@ -98,11 +98,6 @@ def main():
             print("")
             for unexpected_file in unexpected_files:
                 print(f"- ❌ `{unexpected_file}`")
-            print("")
-            print("**Expected repository structure:**")
-            print("- Only `.json` extension description files in the root directory")
-            print("- Only specific configuration files (`.pre-commit-config.yaml`, `README.md`, etc.)")
-            print("- Only allowed directories (`.github`, `scripts`, `ARCHIVE`, etc.)")
     else:
         # Console output
         if unexpected_files:
