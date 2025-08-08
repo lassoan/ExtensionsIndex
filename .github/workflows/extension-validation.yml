@@ -39,60 +39,27 @@ jobs:
       - name: Get changed files
         run: |
           echo "Event: ${{ github.event_name }}"
+          mkdir -p /tmp/validation-reports
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             # For pull requests, compare against the base branch
             BASE_REF="${{ github.event.pull_request.base.ref }}"
             echo "Base ref: $BASE_REF"
-            # Try different approaches to get changed files
-            if git diff --name-only "origin/$BASE_REF"...HEAD > changed_files.txt 2>/dev/null; then
-              echo "Used origin/$BASE_REF as base"
-            elif git diff --name-only "origin/main"...HEAD > changed_files.txt 2>/dev/null; then
-              echo "Used origin/main as base"
-            else
-              echo "Fallback: using all JSON files"
-              ls *.json > changed_files.txt 2>/dev/null || echo "" > changed_files.txt
-            fi
+            git diff --name-only "origin/$BASE_REF"...HEAD > /tmp/validation-reports/changed_files.txt 2>/dev/null
           else
-            # For pushes, compare against the previous commit or use all files
-            if git diff --name-only HEAD~1...HEAD > changed_files.txt 2>/dev/null; then
-              echo "Used HEAD~1 as base"
-            else
-              echo "Fallback: using all JSON files"
-              ls *.json > changed_files.txt 2>/dev/null || echo "" > changed_files.txt
-            fi
+            # For pushes, check all files
+            ls *.json > /tmp/validation-reports/changed_files.txt 2>/dev/null || echo "" > /tmp/validation-reports/changed_files.txt
           fi
           echo "Changed files:"
-          cat changed_files.txt
+          cat /tmp/validation-reports/changed_files.txt
 
       - name: Run extension validation
         continue-on-error: true
         run: |
           mkdir -p /tmp/validation-reports
-          # Filter changed files to only include JSON files
-          if [ -s changed_files.txt ]; then
-            # Filter for JSON files only
-            grep '\.json$' changed_files.txt > json_files.txt || echo "" > json_files.txt
-            if [ -s json_files.txt ]; then
-              echo "Validating changed JSON files:"
-              cat json_files.txt
-              python scripts/check_description_files.py \
-                --report-file /tmp/validation-reports/extension-validation-report.md \
-                --extension-descriptions-folder . \
-                $(cat json_files.txt | tr '\n' ' ') || true
-            else
-              echo "No JSON files changed, creating empty report"
-              echo "# Extension Validation Report" > /tmp/validation-reports/extension-validation-report.md
-              echo "" >> /tmp/validation-reports/extension-validation-report.md
-              echo "No extension JSON files were changed in this PR." >> /tmp/validation-reports/extension-validation-report.md
-            fi
-          else
-            # If no changed files detected, validate all JSON files
-            echo "No changed files detected, validating all JSON files"
-            python scripts/check_description_files.py \
-              --report-file /tmp/validation-reports/extension-validation-report.md \
-              --extension-descriptions-folder . \
-              *.json
-          fi
+          python scripts/check_description_files.py \
+            --report-file /tmp/validation-reports/extension-validation-report.md \
+            --extension-descriptions-folder . \
+            $(cat /tmp/validation-reports/changed_files.txt | tr '\n' ' ')
 
       - name: Combine validation reports
         if: always()
@@ -129,7 +96,7 @@ jobs:
             /tmp/validation-reports/validation-report.md
             /tmp/validation-reports/repository-content-report.md
             /tmp/validation-reports/extension-validation-report.md
-            changed_files.txt
+            /tmp/validation-reports/changed_files.txt
             json_files.txt
           retention-days: 30
 
