@@ -19,20 +19,22 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0  # Fetch full history for git diff
-        
+
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
-          
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r scripts/requirements.txt
-          
+
       - name: Run repository content validation
+        continue-on-error: true
         run: |
+          mkdir -p /tmp/validation-reports
           python scripts/check_repository_content.py \
-            --output-format markdown > repository-content-report.md || true
+            --output-format markdown > /tmp/validation-reports/repository-content-report.md
 
       - name: Get changed files
         run: |
@@ -63,7 +65,9 @@ jobs:
           cat changed_files.txt
 
       - name: Run extension validation
+        continue-on-error: true
         run: |
+          mkdir -p /tmp/validation-reports
           # Filter changed files to only include JSON files
           if [ -s changed_files.txt ]; then
             # Filter for JSON files only
@@ -72,95 +76,96 @@ jobs:
               echo "Validating changed JSON files:"
               cat json_files.txt
               python scripts/check_description_files.py \
-                --report-file extension-validation-report.md \
+                --report-file /tmp/validation-reports/extension-validation-report.md \
                 --extension-descriptions-folder . \
                 $(cat json_files.txt | tr '\n' ' ') || true
             else
               echo "No JSON files changed, creating empty report"
-              echo "# Extension Validation Report" > extension-validation-report.md
-              echo "" >> extension-validation-report.md
-              echo "No extension JSON files were changed in this PR." >> extension-validation-report.md
+              echo "# Extension Validation Report" > /tmp/validation-reports/extension-validation-report.md
+              echo "" >> /tmp/validation-reports/extension-validation-report.md
+              echo "No extension JSON files were changed in this PR." >> /tmp/validation-reports/extension-validation-report.md
             fi
           else
             # If no changed files detected, validate all JSON files
             echo "No changed files detected, validating all JSON files"
             python scripts/check_description_files.py \
-              --report-file extension-validation-report.md \
+              --report-file /tmp/validation-reports/extension-validation-report.md \
               --extension-descriptions-folder . \
-              *.json || true
+              *.json
           fi
-            
+
       - name: Combine validation reports
         if: always()
         run: |
-          if [ -f repository-content-report.md ]; then
-            cat repository-content-report.md >> validation-report.md
+          mkdir -p /tmp/validation-reports
+          if [ -f /tmp/validation-reports/repository-content-report.md ]; then
+            cat /tmp/validation-reports/repository-content-report.md >> /tmp/validation-reports/validation-report.md
           else
-            echo "❌ Repository content validation report not generated" >> validation-report.md
+            echo "❌ Repository content validation report not generated" >> /tmp/validation-reports/validation-report.md
           fi
-          echo "" >> validation-report.md
-          if [ -f extension-validation-report.md ]; then
-            cat extension-validation-report.md >> validation-report.md
+          echo "" >> /tmp/validation-reports/validation-report.md
+          if [ -f /tmp/validation-reports/extension-validation-report.md ]; then
+            cat /tmp/validation-reports/extension-validation-report.md >> /tmp/validation-reports/validation-report.md
           else
-            echo "❌ Extension validation report not generated" >> validation-report.md
+            echo "❌ Extension validation report not generated" >> /tmp/validation-reports/validation-report.md
           fi
-            
+
       - name: Display validation summary
         if: always()
         run: |
           echo "## Validation Summary" >> $GITHUB_STEP_SUMMARY
-          if [ -f validation-report.md ]; then
-            cat validation-report.md >> $GITHUB_STEP_SUMMARY
+          if [ -f /tmp/validation-reports/validation-report.md ]; then
+            cat /tmp/validation-reports/validation-report.md >> $GITHUB_STEP_SUMMARY
           else
             echo "❌ Validation report not generated" >> $GITHUB_STEP_SUMMARY
           fi
-          
+
       - name: Upload validation reports
         if: always()
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: validation-reports
           path: |
-            validation-report.md
-            repository-content-report.md
-            extension-validation-report.md
+            /tmp/validation-reports/validation-report.md
+            /tmp/validation-reports/repository-content-report.md
+            /tmp/validation-reports/extension-validation-report.md
             changed_files.txt
             json_files.txt
           retention-days: 30
-          
+
       - name: Comment PR with report
         if: github.event_name == 'pull_request' && always()
         uses: actions/github-script@e69ef5462fd455e02edcaf4dd7708eda96b9eda0 # v7.0.1
         with:
           script: |
             const fs = require('fs');
-            
+
             // Check if validation report exists
-            if (!fs.existsSync('validation-report.md')) {
+            if (!fs.existsSync('/tmp/validation-reports/validation-report.md')) {
               console.log('Validation report not found');
               return;
             }
-            
-            const report = fs.readFileSync('validation-report.md', 'utf8');
-            
+
+            const report = fs.readFileSync('/tmp/validation-reports/validation-report.md', 'utf8');
+
             // Find existing comment
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
             });
-            
-            const botComment = comments.find(comment => 
-              comment.user.type === 'Bot' && 
+
+            const botComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
               comment.body.includes('Combined Validation Report')
             );
-            
+
             const commentBody = `<!-- extension-validation-report -->
             ${report}
 
             ---
             *This report was automatically generated by the Extension Validation workflow.*`;
-            
+
             if (botComment) {
               // Update existing comment
               await github.rest.issues.updateComment({

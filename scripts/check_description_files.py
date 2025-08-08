@@ -206,8 +206,6 @@ def main():
             with open(args.report_file, 'a', encoding='utf-8') as f:
                 f.write(f"{markdown_message_prefix}{message}\n")
 
-    success = True
-
     extension_description_checks = [
         ("Check category", check_category, {}),
         ("Check git repository name", check_git_repository_name, {}),
