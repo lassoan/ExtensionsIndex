@@ -400,7 +400,7 @@ def main():
             if os.path.isfile(cmake_file_path):
                 with open(cmake_file_path, 'r', encoding='utf-8', errors='ignore') as f:
                     cmake_content = f.read()
-                _log_message(f"Top-level CMakeLists.txt content:\n```\n{cmake_content}```\n")
+                _log_message(f"Top-level CMakeLists.txt content:\n```\n{cmake_content}\n```\n")
             
             # Log the LICENSE.txt file content
 
@@ -420,7 +420,7 @@ def main():
                     license_filename = os.path.basename(license_file_path)
                     if len(license_content) > 1000:
                         license_content = license_content[:1000] + "\n...\n"
-                    _log_message(f"License file ({license_filename}) content:\n```\n{license_content}```\n")
+                    _log_message(f"License file ({license_filename}) content:\n```\n{license_content}\n```\n")
                 except Exception as e:
                     _log_message(f"Failed to read license file: {str(e)}", "error")
                     success = False
