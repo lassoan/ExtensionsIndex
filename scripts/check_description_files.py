@@ -7,9 +7,7 @@ Python 3.x CLI for validating extension description files with enhanced reportin
 import argparse
 import json
 import os
-import sys
 import textwrap
-import urllib.request
 import urllib.parse as urlparse
 import subprocess
 import re
@@ -26,6 +24,16 @@ except ImportError:
         "joblib not available: "
         "consider installing it running 'pip install joblib'"
     ) from None
+
+# Import optional dependencies for JSON schema validation
+jsonschema = None
+requests = None
+try:
+    import jsonschema
+    import requests
+except ImportError as e:
+    print(f"Warning: JSON schema validation dependencies not available: {e}")
+    print("Install with: pip install jsonschema requests")
 
 class ExtensionDependencyError(RuntimeError):
     """Exception raised when a particular extension description file failed to be parsed.
@@ -90,6 +98,58 @@ def parse_json(ext_file_path):
                 textwrap.dedent("""
                 Failed to parse '%s': %s
                 """ % (ext_file_path, exc)))
+
+
+def check_json_schema(extension_name, metadata):
+    """Validate extension description JSON against its referenced schema."""
+    check_name = "check_json_schema"
+    
+    if not jsonschema or not requests:
+        raise ExtensionCheckError(
+            extension_name, check_name,
+            "JSON schema validation requires 'jsonschema' and 'requests' packages. Install with: pip install jsonschema requests")
+    
+    # Check if $schema is present
+    if "$schema" not in metadata:
+        raise ExtensionCheckError(
+            extension_name, check_name,
+            "No $schema field found in extension description")
+    
+    schema_url = metadata["$schema"]
+    if not schema_url:
+        raise ExtensionCheckError(
+            extension_name, check_name,
+            "$schema field is empty")
+    
+    # Remove fragment identifier if present (e.g., #/ at the end)
+    if "#" in schema_url:
+        schema_url = schema_url.split("#")[0]
+    
+    try:
+        # Download the schema
+        response = requests.get(schema_url, timeout=30)
+        response.raise_for_status()
+        schema = response.json()
+    except requests.RequestException as e:
+        raise ExtensionCheckError(
+            extension_name, check_name,
+            f"Failed to download schema from {schema_url}: {str(e)}")
+    except json.JSONDecodeError as e:
+        raise ExtensionCheckError(
+            extension_name, check_name,
+            f"Invalid JSON schema at {schema_url}: {str(e)}")
+    
+    try:
+        # Validate the extension metadata against the schema
+        jsonschema.validate(metadata, schema)
+    except jsonschema.ValidationError as e:
+        raise ExtensionCheckError(
+            extension_name, check_name,
+            f"JSON schema validation failed: {e.message} at path: {' -> '.join(str(p) for p in e.absolute_path)}")
+    except jsonschema.SchemaError as e:
+        raise ExtensionCheckError(
+            extension_name, check_name,
+            f"Invalid schema: {str(e)}")
 
 
 @require_metadata_key("category")
@@ -377,6 +437,7 @@ def main():
             failed_extensions.add(extension_name)
 
         extension_description_checks = [
+            ("Check JSON schema", check_json_schema, {}),
             ("Check category", check_category, {}),
             ("Check git repository name", check_git_repository_name, {}),
             ("Check SCM URL syntax", check_scm_url_syntax, {}),
