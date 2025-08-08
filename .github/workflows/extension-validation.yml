@@ -26,14 +26,45 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r scripts/requirements.txt
-                    
+          
+      - name: Run repository content validation
+        run: |
+          python scripts/check_repository_content.py \
+            --output-format markdown > repository-content-report.md || true
+
+      - name: Get changed files
+        run: |
+          git diff --name-only origin/${{ github.base_ref }}...HEAD > changed_files.txt
+
       - name: Run extension validation
         run: |
-          python scripts/check_description_files_with_report.py \
-            --output-format markdown \
-            --output-file validation-report.md \
-            --check-dependencies . \
-            *.json || true
+          python scripts/check_description_files.py \
+            --report-file extension-validation-report.md \
+            --extension-descriptions-folder . \
+            $(< changed_files.txt) || true
+            
+      - name: Combine validation reports
+        if: always()
+        run: |
+          echo "# Combined Validation Report" > validation-report.md
+          echo "" >> validation-report.md
+          echo "## Repository content Validation" >> validation-report.md
+          echo "" >> validation-report.md
+          if [ -f repository-content-report.md ]; then
+            tail -n +2 repository-content-report.md >> validation-report.md
+          else
+            echo "❌ Repository content validation report not generated" >> validation-report.md
+          fi
+          echo "" >> validation-report.md
+          echo "---" >> validation-report.md
+          echo "" >> validation-report.md
+          echo "## Extension Description Validation" >> validation-report.md
+          echo "" >> validation-report.md
+          if [ -f extension-validation-report.md ]; then
+            tail -n +2 extension-validation-report.md >> validation-report.md
+          else
+            echo "❌ Extension validation report not generated" >> validation-report.md
+          fi
             
       - name: Display validation summary
         if: always()
@@ -45,12 +76,15 @@ jobs:
             echo "❌ Validation report not generated" >> $GITHUB_STEP_SUMMARY
           fi
           
-      - name: Upload validation report
+      - name: Upload validation reports
         if: always()
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
-          name: extension-validation-report
-          path: validation-report.md
+          name: validation-reports
+          path: |
+            validation-report.md
+            repository-content-report.md
+            extension-validation-report.md
           retention-days: 30
           
       - name: Comment PR with report
@@ -77,7 +111,7 @@ jobs:
             
             const botComment = comments.find(comment => 
               comment.user.type === 'Bot' && 
-              comment.body.includes('Extension Description Files Validation Report')
+              comment.body.includes('Combined Validation Report')
             );
             
             const commentBody = `<!-- extension-validation-report -->

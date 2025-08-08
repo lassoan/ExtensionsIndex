@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Python 3.x CLI for validating extension description files.
+Python 3.x CLI for validating extension description files with enhanced reporting.
 """
 
 import argparse
@@ -11,17 +11,27 @@ import sys
 import textwrap
 import urllib.request
 import urllib.parse as urlparse
-
+import subprocess
+from datetime import datetime
 from functools import wraps
+from pathlib import Path
 
 try:
     from joblib import Parallel, delayed, parallel_backend
 except ImportError:
     raise SystemExit(
-        "retry not available: "
+        "joblib not available: "
         "consider installing it running 'pip install joblib'"
     ) from None
 
+class ExtensionDependencyError(RuntimeError):
+    """Exception raised when a particular extension description file failed to be parsed.
+    """
+    def __init__(self, error_list):
+        self.error_list = error_list
+
+    def __str__(self):
+        return "\n".join(self.error_list)
 
 class ExtensionParseError(RuntimeError):
     """Exception raised when a particular extension description file failed to be parsed.
@@ -32,7 +42,6 @@ class ExtensionParseError(RuntimeError):
 
     def __str__(self):
         return self.details
-
 
 class ExtensionCheckError(RuntimeError):
     """Exception raised when a particular extension check failed.
@@ -149,80 +158,101 @@ def check_dependencies(directory):
             else:
                 required_extensions[dependency] = [extension_name]
     print(f"Checked dependency between {len(available_extensions)} extensions.")
-    error_count = 0
+    errors_found = []
     for extension in required_extensions:
         if extension in available_extensions:
             # required extension is found
             continue
         required_by_extensions = ', '.join(required_extensions[extension])
-        print(f"{extension} extension is not found. It is required by extension: {required_by_extensions}.")
-        error_count += 1
-    return error_count
-
+        errors_found.append(f"{extension} extension is not found. It is required by extension: {required_by_extensions}.")
+    if errors_found:
+        raise ExtensionDependencyError(errors_found)
 
 def main():
     parser = argparse.ArgumentParser(
         description='Validate extension description files.')
-    parser.add_argument("-d", "--check-dependencies", help="Check all extension description files in the provided folder.")
-    parser.add_argument("extension_files", nargs='*', help="Extension JSON files to validate")
+    parser.add_argument("--extension-descriptions-folder", help="Folder containing extension description files")
+    parser.add_argument("--report-file", help="Write report to markdown file")
+    parser.add_argument("extension_description_files", nargs='*', help="Extension JSON files to validate")
     args = parser.parse_args()
 
-    checks = []
+    extension_descriptions_folder = "."
+    if args.extension_descriptions_folder:
+        extension_descriptions_folder = args.extension_descriptions_folder
 
-    if not checks:
-        checks = [
-            (check_category, {}),
-            (check_git_repository_name, {}),
-            (check_scm_url_syntax, {}),
+    success = True
+
+    if args.report_file:
+        if not args.report_file.endswith(".md"):
+            raise ValueError("Report file must have .md extension")
+        with open(args.report_file, 'w', encoding='utf-8') as f:
+            # Clear the report file
+            f.write("")
+
+    def _log_message(message, message_type=None):
+        plain_message_prefix = ""
+        markdown_message_prefix = ""
+        if message_type is "error":
+            plain_message_prefix = "FAIL: "
+            markdown_message_prefix = "- :x: "
+        elif message_type is "warning":
+            plain_message_prefix = "WARNING: "
+            markdown_message_prefix = "- :warning: "
+        elif message_type is "success":
+            plain_message_prefix = "PASS: "
+            markdown_message_prefix = "- :white_check_mark: "
+        print(f"{plain_message_prefix}{message}")
+        if args.report_file:
+            with open(args.report_file, 'a', encoding='utf-8') as f:
+                f.write(f"{markdown_message_prefix}{message}\n")
+
+    success = True
+
+    extension_description_checks = [
+        ("Check category", check_category, {}),
+        ("Check git repository name", check_git_repository_name, {}),
+        ("Check SCM URL syntax", check_scm_url_syntax, {}),
         ]
-
-    def _check_extension(file_path, verbose=False):
+    for file_path in args.extension_description_files:
+        file_extension = os.path.splitext(file_path)[1]
+        if file_extension != '.json':
+            # not an extension description file, ignore it
+            print(f"Skipping {file_path} (not a .json file)")
+            continue
+        full_path = os.path.join(extension_descriptions_folder, file_path)
+        if not os.path.isfile(full_path):
+            # not a file in the extensions descriptions folder, ignore it
+            print(f"Skipping {file_path} (not a file in the extensions descriptions folder)")
+            continue
         extension_name = os.path.splitext(os.path.basename(file_path))[0]
-
-        if verbose:
-            print(f"Checking {extension_name}")
-
-        failures = []
-
+        _log_message(f"## Extension: {extension_name}")
         try:
             metadata = parse_json(file_path)
+            url = metadata.get("scm_url", "").strip()
+            _log_message(f"Repository URL: {url}")
+            _log_message("Parsed extension description file successfully", "success")
         except ExtensionParseError as exc:
-            failures.append(str(exc))
+            _log_message(f"Failed to parse extension description file: {exc}", "error")
+            success = False
+            continue
 
-        if not failures:
-            for check, check_kwargs in checks:
-                try:
-                    check(extension_name, metadata, **check_kwargs)
-                except ExtensionCheckError as exc:
-                    failures.append(str(exc))
+        for check_description, check, check_kwargs in extension_description_checks:
+            try:
+                check(extension_name, metadata, **check_kwargs)
+                _log_message(f"{check_description} completed successfully", "success")
+            except ExtensionCheckError as exc:
+                _log_message(f"{check_description} failed: {exc}", "error")
+                success = False
 
-        # Keep track extension errors removing duplicates
-        return extension_name, list(set(failures))
+    try:
+        _log_message("## Extension dependencies", "info")
+        check_dependencies(extension_descriptions_folder)
+        _log_message("Dependency check completed successfully", "success")
+    except ExtensionDependencyError as exc:
+        _log_message(f"Dependency check failed: {exc}", "error")
+        success = False
 
-    file_paths = args.extension_files
-    with parallel_backend("threading", n_jobs=6):
-        jobs = Parallel(verbose=False)(
-            delayed(_check_extension)(file_path)
-            for file_path in file_paths
-        )
-
-    total_failure_count = 0
-
-    for extension_name, failures in jobs:
-        if failures:
-            total_failure_count += len(failures)
-            print("%s.json" % extension_name)
-            for failure in set(failures):
-                print("  %s" % failure)
-
-    print(f"Checked content of {len(file_paths)} description files.")
-
-
-    if args.check_dependencies:
-        total_failure_count += check_dependencies(args.check_dependencies)
-
-    print(f"Total errors found in extension descriptions: {total_failure_count}")
-    sys.exit(total_failure_count)
+    sys.exit(0 if success else 1)
 
 
 REPOSITORY_NAME_CHECK_EXCEPTIONS = [

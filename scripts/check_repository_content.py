@@ -1,0 +1,122 @@
+#!/usr/bin/env python
+
+"""
+Python script for validating repository file structure.
+Checks for unexpected files and directories in the extension repository.
+"""
+
+import argparse
+import sys
+from pathlib import Path
+
+
+def check_filenames():
+    """Check for unexpected files in the repository."""
+    # Get the repository root directory (parent of scripts directory)
+    script_dir = Path(__file__).parent
+    root_dir = script_dir.parent
+    
+    # Define allowed directories
+    allowed_directories = {
+        '.circleci',
+        '.idea', 
+        '.github',
+        '.git',
+        'ARCHIVE',
+        'scripts',
+        '.venv',          # Python virtual environment
+        'venv',           # Alternative venv name
+        '__pycache__',    # Python cache
+        '.pytest_cache'   # Pytest cache
+    }
+    
+    # Define allowed files (exact names)
+    allowed_files = {
+        '.pre-commit-config.yaml',
+        '.prettierrc.js',
+        '.git-blame-ignore-revs',
+        'README.md'
+    }
+    
+    # Define allowed file patterns (extensions)
+    allowed_extensions = {
+        '.json'
+    }
+    
+    def is_file_allowed(file_path):
+        """Check if a file is allowed based on name or extension."""
+        # Check exact filename
+        if file_path.name in allowed_files:
+            return True
+        
+        # Check file extension
+        if file_path.suffix in allowed_extensions:
+            return True
+        
+        return False
+    
+    unexpected_files = []
+    
+    # Walk through all files and directories in the root
+    for item in root_dir.iterdir():
+        if item.is_dir():
+            # Check if directory is allowed
+            if item.name not in allowed_directories:
+                unexpected_files.append(str(item.relative_to(root_dir)))
+        elif item.is_file():
+            # Check if file is allowed
+            if not is_file_allowed(item):
+                unexpected_files.append(str(item.relative_to(root_dir)))
+    
+    return unexpected_files
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Validate repository file structure.')
+    parser.add_argument("--output-format", choices=["console", "markdown"], default="console", 
+                       help="Output format for the report")
+    args = parser.parse_args()
+
+    unexpected_files = check_filenames()
+    
+    if args.output_format == "markdown":
+        # Generate markdown report
+        print("# Repository Structure Validation Report")
+        print("")
+        print(f"**Total unexpected files/directories found:** {len(unexpected_files)}")
+        print("")
+        
+        if not unexpected_files:
+            print("✅ **Repository structure validation passed!**")
+            print("")
+            print("All files and directories in the repository follow the expected structure.")
+        else:
+            print("❌ **Repository structure issues found**")
+            print("")
+            print("The following unexpected files or directories were found:")
+            print("")
+            for unexpected_file in unexpected_files:
+                print(f"- ❌ `{unexpected_file}`")
+            print("")
+            print("**Expected repository structure:**")
+            print("- Only `.json` extension description files in the root directory")
+            print("- Only specific configuration files (`.pre-commit-config.yaml`, `README.md`, etc.)")
+            print("- Only allowed directories (`.github`, `scripts`, `ARCHIVE`, etc.)")
+    else:
+        # Console output
+        if unexpected_files:
+            print("Repository structure validation failed:")
+            for unexpected_file in unexpected_files:
+                print(f"  {unexpected_file}")
+        else:
+            print("Repository structure validation passed.")
+    
+    print(f"Total unexpected files found: {len(unexpected_files)}")
+    
+    # Exit with error code if issues found
+    sys.exit(len(unexpected_files))
+
+
+if __name__ == "__main__":
+    main()
