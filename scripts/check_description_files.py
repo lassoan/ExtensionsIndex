@@ -294,13 +294,13 @@ def main():
         markdown_message_prefix = ""
         if message_type == "error":
             plain_message_prefix = "FAIL: "
-            markdown_message_prefix = "- :x: "
+            markdown_message_prefix = "- ❌ "
         elif message_type == "warning":
             plain_message_prefix = "WARNING: "
-            markdown_message_prefix = "- :warning: "
+            markdown_message_prefix = "- ⚠️ "
         elif message_type == "success":
             plain_message_prefix = "PASS: "
-            markdown_message_prefix = "- :white_check_mark: "
+            markdown_message_prefix = "- ✅ "
         print(f"{plain_message_prefix}{message}")
         if args.report_file:
             with open(args.report_file, 'a', encoding='utf-8') as f:
@@ -323,7 +323,7 @@ def main():
         try:
             metadata = parse_json(file_path)
             url = metadata.get("scm_url", "").strip()
-            _log_message(f"Repository URL: {url}")
+            _log_message(f"Repository URL: {url}\n")
         except ExtensionParseError as exc:
             _log_message(f"Failed to parse extension description file: {exc}", "error")
             success = False
@@ -341,6 +341,36 @@ def main():
                 with open(cmake_file_path, 'r', encoding='utf-8', errors='ignore') as f:
                     cmake_content = f.read()
                 _log_message(f"Top-level CMakeLists.txt content:\n```\n{cmake_content}```\n")
+            
+            # Log the LICENSE.txt file content
+            license_file_path = os.path.join(cloned_repository_folder, "LICENSE.txt")
+            license_file_found = None
+            if os.path.isfile(license_file_path):
+                license_file_found = license_file_path
+            else:
+                # Check for other common license file names
+                alternative_names = ["LICENSE", "License.txt", "license.txt", "COPYING", "COPYING.txt"]
+                for alt_name in alternative_names:
+                    alt_path = os.path.join(cloned_repository_folder, alt_name)
+                    if os.path.isfile(alt_path):
+                        license_file_found = alt_path
+                        break
+            
+            if license_file_found:
+                try:
+                    with open(license_file_found, 'r', encoding='utf-8', errors='ignore') as f:
+                        license_content = f.read()
+                    license_filename = os.path.basename(license_file_found)
+                    if len(license_content) > 1000:
+                        license_content = license_content[:1000] + "\n...\n"
+                    _log_message(f"License file ({license_filename}) content:\n```\n{license_content}```\n")
+                except Exception as e:
+                    _log_message(f"Failed to read license file: {str(e)}", "error")
+                    success = False
+            else:
+                _log_message("No license file found in repository root", "error")
+                success = False
+
         except ExtensionCheckError as exc:
             _log_message(f"Failed to clone repository: {exc}", "error")
             success = False
