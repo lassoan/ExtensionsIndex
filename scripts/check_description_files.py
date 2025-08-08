@@ -220,9 +220,9 @@ def clone_repository(scm_url, scm_revision):
     except FileNotFoundError:
         raise ExtensionCheckError("unknown", "clone_repository", "Git command not found. Please ensure git is installed and in PATH")
 
-def check_extension_repository_content(extension_name, metadata, cloned_repository_folder=None):
+def check_cmakelists_content(extension_name, metadata, cloned_repository_folder=None):
     """Check if the top-level CMakeLists.txt file project name matches the extension name."""
-    check_name = "check_extension_repository_content"
+    check_name = "check_cmakelists_content"
 
     # Look for CMakeLists.txt in the cloned repository
     if not cloned_repository_folder:
@@ -244,24 +244,90 @@ def check_extension_repository_content(extension_name, metadata, cloned_reposito
             extension_name, check_name,
             f"Failed to read CMakeLists.txt: {str(e)}")
     
+    extension_name_in_cmake = None
+
     # Parse CMakeLists.txt to find project() declaration
     # Look for patterns like: project(ExtensionName) or project(ExtensionName VERSION ...)
     # Handle multi-line project declarations and various whitespace
     project_pattern = r'project\s*\(\s*([^\s\)\n\r]+)'
     matches = re.findall(project_pattern, cmake_content, re.IGNORECASE | re.MULTILINE)
-    
-    if not matches:
+    if matches:
+        extension_name_in_cmake = matches[0].strip().strip('"').strip("'")
+
+    # if PROJECT name is not specified then fall back to the old EXTENSION_NAME variable
+    if not extension_name_in_cmake:
+        extension_name_pattern = r'set\(EXTENSION_NAME\s+([^\s\)]+)\)'
+        extension_name_matches = re.findall(extension_name_pattern, cmake_content, re.IGNORECASE | re.MULTILINE)
+        if extension_name_matches:
+            extension_name_in_cmake = extension_name_matches[0].strip().strip('"').strip("'")
+
+    if not extension_name_in_cmake:
         raise ExtensionCheckError(
             extension_name, check_name,
             "No project() declaration found in CMakeLists.txt")
-    
-    cmake_project_name = matches[0].strip().strip('"').strip("'")
-    
+
     # Check if the project name matches the extension name
-    if cmake_project_name != extension_name:
+    if extension_name_in_cmake != extension_name:
         raise ExtensionCheckError(
             extension_name, check_name,
-            f"CMakeLists.txt project name '{cmake_project_name}' does not match extension name '{extension_name}'")
+            f"Extension name in CMakeLists.txt project name '{extension_name_in_cmake}' does not match extension description file name '{extension_name}'")
+    
+    # Check extension icon URL
+    # set(EXTENSION_ICONURL "https://raw.githubusercontent.com/jamesobutler/ModelClip/main/Resources/Icons/ModelClip.png")
+    extension_icon_url = None
+    icon_url_pattern = r'set\s*\(EXTENSION_ICONURL\s*"([^"]+)"\)'
+    icon_url_matches = re.findall(icon_url_pattern, cmake_content, re.IGNORECASE | re.MULTILINE)
+    if icon_url_matches:
+        extension_icon_url = icon_url_matches[0].strip()
+        if not extension_icon_url.startswith("http"):
+            raise ExtensionCheckError(
+                extension_name, check_name,
+                f"EXTENSION_ICONURL '{extension_icon_url}' should be a valid URL starting with 'http'")
+    if not extension_icon_url:
+        raise ExtensionCheckError(
+            extension_name, check_name,
+            "No EXTENSION_ICONURL found in CMakeLists.txt.")
+    # Download the icon to check if it is valid
+    try:
+        response = requests.get(extension_icon_url, timeout=10)
+        response.raise_for_status()
+        if response.headers.get('Content-Type') not in ['image/png', 'image/jpeg', 'image/gif']:
+            raise ExtensionCheckError(
+                extension_name, check_name,
+                f"EXTENSION_ICONURL '{extension_icon_url}' does not point to a valid image (expected PNG, JPEG, or GIF)")
+    except requests.RequestException as e:
+        raise ExtensionCheckError(
+            extension_name, check_name,
+            f"Failed to download icon from EXTENSION_ICONURL '{extension_icon_url}': {str(e)}")
+
+    # Check screenshot URLS
+    # set(EXTENSION_SCREENSHOTURLS "https://raw.githubusercontent.com/SlicerProstate/SlicerZFrameRegistration/master/Screenshots/1.png https://raw.githubusercontent.com/SlicerProstate/SlicerZFrameRegistration/master/Screenshots/2.png")
+    extension_screenshot_urls = []
+    screenshot_urls_pattern = r'set\s*\(EXTENSION_SCREENSHOTURLS\s*"([^"]+)"\)'
+    screenshot_urls_matches = re.findall(screenshot_urls_pattern, cmake_content, re.IGNORECASE | re.MULTILINE)
+    if screenshot_urls_matches:
+        extension_screenshot_urls = [url.strip() for url in screenshot_urls_matches[0].split()]
+        for url in extension_screenshot_urls:
+            if not url.startswith("http"):
+                raise ExtensionCheckError(
+                    extension_name, check_name,
+                    f"EXTENSION_SCREENSHOTURLS '{url}' should be a valid URL starting with 'http'")
+    if not extension_screenshot_urls:
+        raise ExtensionCheckError(
+            extension_name, check_name,
+            "No EXTENSION_SCREENSHOTURLS found in CMakeLists.txt.")
+    for url in extension_screenshot_urls:
+        try:
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            if response.headers.get('Content-Type') not in ['image/png', 'image/jpeg', 'image/gif']:
+                raise ExtensionCheckError(
+                    extension_name, check_name,
+                    f"EXTENSION_SCREENSHOTURLS '{url}' does not point to a valid image (expected PNG, JPEG, or GIF)")
+        except requests.RequestException as e:
+            raise ExtensionCheckError(
+                extension_name, check_name,
+                f"Failed to download screenshot from EXTENSION_SCREENSHOTURLS '{url}': {str(e)}")
 
 def check_dependencies(directory):
     import os
@@ -406,7 +472,7 @@ def main():
 
             license_file_path = os.path.join(cloned_repository_folder, "LICENSE.txt")
             license_file_path = None
-            license_file_names = ["LICENSE", "License.txt", "license.txt", "COPYING", "COPYING.txt"]
+            license_file_names = ["LICENSE", "License.txt", "license.txt", "LICENSE.txt" "COPYING", "COPYING.txt"]
             for license_file_name in license_file_names:
                 potential_path = os.path.join(cloned_repository_folder, license_file_name)
                 if os.path.isfile(potential_path):
@@ -440,7 +506,7 @@ def main():
             ("Check category", check_category, {}),
             ("Check git repository name", check_git_repository_name, {}),
             ("Check SCM URL syntax", check_scm_url_syntax, {}),
-            ("Check repository content", check_extension_repository_content, {"cloned_repository_folder": cloned_repository_folder}),
+            ("Check CMakeLists.txt content", check_cmakelists_content, {"cloned_repository_folder": cloned_repository_folder}),
             ]
         for check_description, check, check_kwargs in extension_description_checks:
             try:
