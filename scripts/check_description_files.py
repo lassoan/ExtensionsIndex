@@ -470,7 +470,6 @@ def main():
 
             # Log the LICENSE.txt file content
 
-            license_file_path = os.path.join(cloned_repository_folder, "LICENSE.txt")
             license_file_path = None
             license_file_names = ["LICENSE", "License.txt", "license.txt", "LICENSE.txt" "COPYING", "COPYING.txt"]
             for license_file_name in license_file_names:
@@ -607,7 +606,7 @@ REPOSITORY_NAME_CHECK_EXCEPTIONS = [
 ]
 
 LICENSE_CHECK_EXCEPTIONS = [
-    "3DMetricTools",
+    "AirwaySegmentation",
     "ai-assisted-annotation-client",
 ]
 ACCEPTED_EXTENSION_CATEGORIES = [
