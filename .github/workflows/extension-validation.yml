@@ -46,22 +46,14 @@ jobs:
       - name: Combine validation reports
         if: always()
         run: |
-          echo "# Combined Validation Report" > validation-report.md
-          echo "" >> validation-report.md
-          echo "## Repository content Validation" >> validation-report.md
-          echo "" >> validation-report.md
           if [ -f repository-content-report.md ]; then
-            tail -n +2 repository-content-report.md >> validation-report.md
+            cat repository-content-report.md >> validation-report.md
           else
             echo "❌ Repository content validation report not generated" >> validation-report.md
           fi
           echo "" >> validation-report.md
-          echo "---" >> validation-report.md
-          echo "" >> validation-report.md
-          echo "## Extension Description Validation" >> validation-report.md
-          echo "" >> validation-report.md
           if [ -f extension-validation-report.md ]; then
-            tail -n +2 extension-validation-report.md >> validation-report.md
+            cat extension-validation-report.md >> validation-report.md
           else
             echo "❌ Extension validation report not generated" >> validation-report.md
           fi
