@@ -337,6 +337,7 @@ def check_cmakelists_content(extension_name, metadata, cloned_repository_folder=
         raise ExtensionCheckError(
             extension_name, check_name,
             f"Failed to download icon from EXTENSION_ICONURL '{extension_icon_url}': {str(e)}")
+    print(f"- :white_check_mark: Extension icon URL: {extension_icon_url}\n")
 
     # Check screenshot URLS
     # set(EXTENSION_SCREENSHOTURLS "https://raw.githubusercontent.com/SlicerProstate/SlicerZFrameRegistration/master/Screenshots/1.png https://raw.githubusercontent.com/SlicerProstate/SlicerZFrameRegistration/master/Screenshots/2.png")
@@ -366,6 +367,7 @@ def check_cmakelists_content(extension_name, metadata, cloned_repository_folder=
             raise ExtensionCheckError(
                 extension_name, check_name,
                 f"Failed to download screenshot from EXTENSION_SCREENSHOTURLS '{url}': {str(e)}")
+        print(f"- :white_check_mark: Extension screenshot URL: {url}")
 
     # Log the top-level CMakeLists.txt file content
     return f"\nTop-level CMakeLists.txt content:\n```\n{cmake_content}\n```\n"
