@@ -346,9 +346,9 @@ def check_dependencies(directory):
             print(exc)
             continue
         available_extensions.append(extension_name)
-        if 'depends' not in extension_description:
+        if 'build_dependencies' not in extension_description:
             continue
-        dependencies = extension_description['depends']
+        dependencies = extension_description['build_dependencies']
         for dependency in dependencies:
             if dependency in required_extensions:
                 required_extensions[dependency].append(extension_name)
@@ -361,7 +361,7 @@ def check_dependencies(directory):
             # required extension is found
             continue
         required_by_extensions = ', '.join(required_extensions[extension])
-        errors_found.append(f"{extension} extension is not found. It is required by extension: {required_by_extensions}.")
+        errors_found.append(f"'{extension}' extension is not found. It is required by extension: {required_by_extensions}.")
     if errors_found:
         raise ExtensionDependencyError(errors_found)
 
