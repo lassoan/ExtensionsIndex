@@ -198,6 +198,34 @@ def check_git_repository_name(extension_name, metadata):
             """ % (
                 repo_name, repo_name, variations)))
 
+def validate_image_url(url, url_type, extension_name, check_name):
+    """Validate that a URL points to a valid image file."""
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        content_type = response.headers.get('Content-Type', '').lower()
+
+        # Check if it's a valid image content type or if the URL suggests it's an image
+        valid_image_types = ['image/png', 'image/jpeg', 'image/gif']
+        is_valid_content_type = any(img_type in content_type for img_type in valid_image_types)
+
+        # Allow application/octet-stream only if the URL ends with an image extension
+        if not is_valid_content_type:
+            if 'application/octet-stream' in content_type:
+                # Check if URL has image file extension
+                if not any(url.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif']):
+                    raise ExtensionCheckError(
+                        extension_name, check_name,
+                        f"{url_type} '{url}' returns 'application/octet-stream' but URL doesn't have an image file extension")
+            else:
+                raise ExtensionCheckError(
+                    extension_name, check_name,
+                    f"{url_type} '{url}' does not point to a valid image (Content-Type: {content_type})")
+    except requests.RequestException as e:
+        raise ExtensionCheckError(
+            extension_name, check_name,
+            f"Failed to download {url_type.lower()} from {url_type} '{url}': {str(e)}")
+
 def safe_cleanup_directory(directory_path, max_attempts=3):
     """Safely remove a directory with retries and permission handling."""
     if not directory_path or not os.path.exists(directory_path):
@@ -325,18 +353,9 @@ def check_cmakelists_content(extension_name, metadata, cloned_repository_folder=
         raise ExtensionCheckError(
             extension_name, check_name,
             "No EXTENSION_ICONURL found in CMakeLists.txt.")
-    # Download the icon to check if it is valid
-    try:
-        response = requests.get(extension_icon_url, timeout=10)
-        response.raise_for_status()
-        if response.headers.get('Content-Type') not in ['image/png', 'image/jpeg', 'image/gif']:
-            raise ExtensionCheckError(
-                extension_name, check_name,
-                f"EXTENSION_ICONURL '{extension_icon_url}' does not point to a valid image (expected PNG, JPEG, or GIF)")
-    except requests.RequestException as e:
-        raise ExtensionCheckError(
-            extension_name, check_name,
-            f"Failed to download icon from EXTENSION_ICONURL '{extension_icon_url}': {str(e)}")
+
+    # Validate the icon URL
+    validate_image_url(extension_icon_url, "EXTENSION_ICONURL", extension_name, check_name)
     print(f"- :white_check_mark: Extension icon URL: {extension_icon_url}\n")
 
     # Check screenshot URLS
@@ -355,18 +374,9 @@ def check_cmakelists_content(extension_name, metadata, cloned_repository_folder=
         raise ExtensionCheckError(
             extension_name, check_name,
             "No EXTENSION_SCREENSHOTURLS found in CMakeLists.txt.")
+
     for url in extension_screenshot_urls:
-        try:
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            if response.headers.get('Content-Type') not in ['image/png', 'image/jpeg', 'image/gif']:
-                raise ExtensionCheckError(
-                    extension_name, check_name,
-                    f"EXTENSION_SCREENSHOTURLS '{url}' does not point to a valid image (expected PNG, JPEG, or GIF)")
-        except requests.RequestException as e:
-            raise ExtensionCheckError(
-                extension_name, check_name,
-                f"Failed to download screenshot from EXTENSION_SCREENSHOTURLS '{url}': {str(e)}")
+        validate_image_url(url, "EXTENSION_SCREENSHOTURLS", extension_name, check_name)
         print(f"- :white_check_mark: Extension screenshot URL: {url}")
 
     # Log the top-level CMakeLists.txt file content
