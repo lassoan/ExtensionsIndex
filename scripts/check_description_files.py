@@ -158,7 +158,7 @@ def check_json_schema(extension_name, metadata):
 def check_category(extension_name, metadata):
     category = metadata["category"]
     if category not in ACCEPTED_EXTENSION_CATEGORIES:
-        raise ExtensionCheckError(extension_name, "check_category", f"Category '{category}' is unknown. Consider using any of the known extensions instead: {', '.join(ACCEPTED_EXTENSION_CATEGORIES)}")
+        raise ExtensionCheckError(extension_name, "check_category", f"Category **`{category}`** is unknown. Consider using any of the known extensions instead: `{'`, `'.join(ACCEPTED_EXTENSION_CATEGORIES)}`")
 
 @require_metadata_key("scm_url")
 def check_scm_url_syntax(extension_name, metadata):
