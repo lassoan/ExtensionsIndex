@@ -275,7 +275,7 @@ def check_cmakelists_content(extension_name, metadata, cloned_repository_folder=
     # Check extension icon URL
     # set(EXTENSION_ICONURL "https://raw.githubusercontent.com/jamesobutler/ModelClip/main/Resources/Icons/ModelClip.png")
     extension_icon_url = None
-    icon_url_pattern = r'set\s*\(EXTENSION_ICONURL\s*"([^"]+)"\)'
+    icon_url_pattern = r'set\s*\(EXTENSION_ICONURL\s*"([^"]+)"[ ]*\)'
     icon_url_matches = re.findall(icon_url_pattern, cmake_content, re.IGNORECASE | re.MULTILINE)
     if icon_url_matches:
         extension_icon_url = icon_url_matches[0].strip()
@@ -471,7 +471,7 @@ def main():
             # Log the LICENSE.txt file content
 
             license_file_path = None
-            license_file_names = ["LICENSE", "License.txt", "license.txt", "LICENSE.txt" "COPYING", "COPYING.txt"]
+            license_file_names = ["LICENSE", "LICENCE", "License.txt", "license.txt", "LICENSE.txt" "COPYING", "COPYING.txt"]
             for license_file_name in license_file_names:
                 potential_path = os.path.join(cloned_repository_folder, license_file_name)
                 if os.path.isfile(potential_path):
@@ -607,7 +607,10 @@ REPOSITORY_NAME_CHECK_EXCEPTIONS = [
 
 LICENSE_CHECK_EXCEPTIONS = [
     "AirwaySegmentation",
+    "AnatomyCarve",
     "AnglePlanesExtension",
+    "Auto3dgm",
+    "AutomatedDentalTools",
 ]
 ACCEPTED_EXTENSION_CATEGORIES = [
     "Active Learning",
