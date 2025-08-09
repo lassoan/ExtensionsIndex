@@ -202,7 +202,7 @@ def safe_cleanup_directory(directory_path, max_attempts=3):
     """Safely remove a directory with retries and permission handling."""
     if not directory_path or not os.path.exists(directory_path):
         return True
-    
+
     def force_remove_readonly(func, path, exc_info):
         """Error handler for Windows readonly files"""
         try:
@@ -211,7 +211,7 @@ def safe_cleanup_directory(directory_path, max_attempts=3):
                 func(path)
         except Exception:
             pass  # Ignore errors in the error handler
-    
+
     for attempt in range(max_attempts):
         try:
             shutil.rmtree(directory_path, onexc=force_remove_readonly)
@@ -475,7 +475,7 @@ def main():
     failed_extensions = set()
     found_extensions = []
     for file_path in args.extension_description_files:
-        
+
         # Get extension name and desctiption file path
         file_extension = os.path.splitext(file_path)[1]
         if file_extension != '.json':
@@ -487,7 +487,7 @@ def main():
             continue
         extension_name = os.path.splitext(os.path.basename(file_path))[0]
         found_extensions.append(extension_name)
-        
+
         print(f"## Extension: {extension_name}")
 
         # Log the description file content for convenience
@@ -540,9 +540,9 @@ def main():
     try:
         print("## Extension dependencies")
         check_dependencies(extension_descriptions_folder)
-        print("- :white_check_mark: Dependency check completed successfully")
+        print(":white_check_mark: Dependency check completed successfully")
     except ExtensionDependencyError as exc:
-        print(f"- :x: Dependency check failed: {exc}")
+        print(f":x: Dependency check failed: {exc}")
         success = False
 
     return 0 if success else 1
