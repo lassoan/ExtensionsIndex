@@ -449,7 +449,10 @@ def main():
         try:
             metadata = parse_json(file_path)
             url = metadata.get("scm_url", "").strip()
+            revision = metadata.get("scm_revision", "").strip()
             _log_message(f"Repository URL: {url}\n")
+            if revision:
+                _log_message(f"Repository revision: {revision}\n")
 
             # Log the description file content for convenience
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
