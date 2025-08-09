@@ -350,6 +350,8 @@ def check_dependencies(directory):
             continue
         dependencies = extension_description['build_dependencies']
         for dependency in dependencies:
+            if not dependency:
+                continue
             if dependency in required_extensions:
                 required_extensions[dependency].append(extension_name)
             else:

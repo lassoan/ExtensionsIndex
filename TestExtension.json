@@ -3,5 +3,5 @@
   "build_subdirectory": ".",
   "scm_revision": "main",
   "scm_url": "https://github.com/example/TestExtension",
-  "tier": 2
+  "tier": 1
 }
