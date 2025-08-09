@@ -39,6 +39,7 @@ jobs:
           pip list | grep -E "(jsonschema|requests|joblib)"
 
       - name: Run repository structure validation
+        id: structure-validation
         continue-on-error: true
         run: |
           mkdir -p /tmp/validation-reports
@@ -62,6 +63,7 @@ jobs:
           cat /tmp/validation-reports/changed_files.txt
 
       - name: Run extension validation
+        id: extension-validation
         continue-on-error: true
         run: |
           mkdir -p /tmp/validation-reports
@@ -159,3 +161,20 @@ jobs:
                 body: commentBody
               });
             }
+
+      - name: Check validation results
+        if: always()
+        run: |
+          echo "Checking validation results..."
+          STRUCTURE_RESULT="${{ steps.structure-validation.outcome }}"
+          EXTENSION_RESULT="${{ steps.extension-validation.outcome }}"
+          
+          echo "Repository structure validation: $STRUCTURE_RESULT"
+          echo "Extension validation: $EXTENSION_RESULT"
+          
+          if [ "$STRUCTURE_RESULT" != "success" ] || [ "$EXTENSION_RESULT" != "success" ]; then
+            echo "❌ One or more validation steps failed"
+            exit 1
+          else
+            echo "✅ All validation steps passed"
+          fi
