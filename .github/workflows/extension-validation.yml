@@ -50,16 +50,14 @@ jobs:
           echo "Event: ${{ github.event_name }}"
           mkdir -p /tmp/validation-reports
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            # Pull request: compare against the base branch
+            # For pull requests, compare against the base branch
             BASE_REF="${{ github.event.pull_request.base.ref }}"
+            echo "Base ref: $BASE_REF"
+            git diff --name-only "origin/$BASE_REF"...HEAD > /tmp/validation-reports/changed_files.txt 2>/dev/null
           else
-            # Push: check last commit
-            BASE_REF=$(git rev-parse HEAD^)
-            # To check all files instead:
-            # ls *.json > /tmp/validation-reports/changed_files.txt 2>/dev/null || echo "" > /tmp/validation-reports/changed_files.txt
+            # For pushes, check last diff
+            git diff --name-only > /tmp/validation-reports/changed_files.txt 2>/dev/null
           fi
-          echo "Base ref: $BASE_REF"
-          git diff --name-only "origin/$BASE_REF"...HEAD > /tmp/validation-reports/changed_files.txt 2>/dev/null
           echo "Changed files:"
           cat /tmp/validation-reports/changed_files.txt
 
