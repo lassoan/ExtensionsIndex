@@ -55,10 +55,10 @@ jobs:
             echo "Base ref: $BASE_REF"
             git diff --name-only "origin/$BASE_REF"...HEAD > /tmp/validation-reports/changed_files.txt 2>/dev/null
           else
-            # For pushes, check last diff
-            git diff --name-only > /tmp/validation-reports/changed_files.txt 2>/dev/null
+            # For pushes, compare against the previous commit or get all JSON files if it's the first commit
+            git diff --name-only HEAD~1 HEAD > /tmp/validation-reports/changed_files.txt 2>/dev/null || echo "" > /tmp/validation-reports/changed_files.txt
           fi
-          echo "Changed files:"
+          echo "Changed JSON files:"
           cat /tmp/validation-reports/changed_files.txt
 
       - name: Run extension validation
