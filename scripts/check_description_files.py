@@ -366,7 +366,7 @@ def check_cmakelists_content(extension_name, metadata, cloned_repository_folder=
             raise ExtensionCheckError(
                 extension_name, check_name,
                 f"Failed to download screenshot from EXTENSION_SCREENSHOTURLS '{url}': {str(e)}")
-        
+
     # Log the top-level CMakeLists.txt file content
     return f"\nTop-level CMakeLists.txt content:\n```\n{cmake_content}\n```\n"
 
