@@ -203,15 +203,15 @@ def clone_repository(scm_url, scm_revision):
         if scm_revision:
             subprocess.run(
                 ['git', 'clone', scm_url, temp_dir],
-                check=True, capture_output=True, text=True, timeout=120)
+                check=True, capture_output=True, text=True, timeout=300)
             subprocess.run(
                 ['git', 'checkout', scm_revision],
                 cwd=temp_dir,
-                check=True, capture_output=True, text=True, timeout=30)
+                check=True, capture_output=True, text=True, timeout=300)
         else:
             subprocess.run(
                 ['git', 'clone', '--depth', '1', scm_url, temp_dir],
-                check=True, capture_output=True, text=True, timeout=60)
+                check=True, capture_output=True, text=True, timeout=600)
         return temp_dir
     except subprocess.TimeoutExpired as e:
         raise ExtensionCheckError("unknown", "clone_repository", f"Git clone operation timed out: {e}")
@@ -450,6 +450,12 @@ def main():
             metadata = parse_json(file_path)
             url = metadata.get("scm_url", "").strip()
             _log_message(f"Repository URL: {url}\n")
+
+            # Log the description file content for convenience
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                description_file_content = f.read()
+            _log_message(f"Extension description file content:\n```\n{description_file_content}\n```\n")
+
         except ExtensionParseError as exc:
             _log_message(f"Failed to parse extension description file: {exc}", "error")
             success = False
