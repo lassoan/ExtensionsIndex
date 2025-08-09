@@ -368,7 +368,7 @@ def check_cmakelists_content(extension_name, metadata, cloned_repository_folder=
                 f"Failed to download screenshot from EXTENSION_SCREENSHOTURLS '{url}': {str(e)}")
         
     # Log the top-level CMakeLists.txt file content
-    return f"Top-level CMakeLists.txt content:\n```\n{cmake_content}\n```\n"
+    return f"\nTop-level CMakeLists.txt content:\n```\n{cmake_content}\n```\n"
 
 def check_license_file(extension_name, metadata, cloned_repository_folder):
     # Find license file
@@ -391,7 +391,7 @@ def check_license_file(extension_name, metadata, cloned_repository_folder):
         license_content = f.read()
     if len(license_content) > 1000:
         license_content = license_content[:1000] + "...\n"
-    return f"License file ({os.path.basename(license_file_path)}) content:\n```\n{license_content}\n```\n"
+    return f"\nLicense file ({os.path.basename(license_file_path)}) content:\n```\n{license_content}\n```\n"
 
 def check_dependencies(directory):
     import os
