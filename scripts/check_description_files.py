@@ -282,9 +282,6 @@ def check_cmakelists_content(extension_name, metadata, cloned_repository_folder=
             extension_name, check_name,
             f"Failed to read CMakeLists.txt: {str(e)}")
 
-    # Log the top-level CMakeLists.txt file content
-    print(f"Top-level CMakeLists.txt content:\n```\n{cmake_content}\n```\n")
-
     extension_name_in_cmake = None
 
     # Parse CMakeLists.txt to find project() declaration
@@ -369,6 +366,9 @@ def check_cmakelists_content(extension_name, metadata, cloned_repository_folder=
             raise ExtensionCheckError(
                 extension_name, check_name,
                 f"Failed to download screenshot from EXTENSION_SCREENSHOTURLS '{url}': {str(e)}")
+        
+    # Log the top-level CMakeLists.txt file content
+    return f"Top-level CMakeLists.txt content:\n```\n{cmake_content}\n```\n"
 
 def check_license_file(extension_name, metadata, cloned_repository_folder):
     # Find license file
@@ -420,7 +420,8 @@ def check_dependencies(directory):
                 required_extensions[dependency].append(extension_name)
             else:
                 required_extensions[dependency] = [extension_name]
-    print(f"Checked dependency between {len(available_extensions)} extensions.")
+
+    print(f"Checked dependency between {len(available_extensions)} extensions.\n")
     errors_found = []
     for extension in required_extensions:
         if extension in available_extensions:
