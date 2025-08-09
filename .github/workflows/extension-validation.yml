@@ -44,7 +44,7 @@ jobs:
         run: |
           mkdir -p /tmp/validation-reports
           python scripts/check_repository_structure.py \
-            --output-format markdown > /tmp/validation-reports/repository-structure-report.md
+            > /tmp/validation-reports/repository-structure-report.md
 
       - name: Get changed files
         run: |
@@ -57,7 +57,7 @@ jobs:
             git diff --name-only "origin/$BASE_REF"...HEAD > /tmp/validation-reports/changed_files.txt 2>/dev/null
           else
             # For pushes, compare against the previous commit or get all JSON files if it's the first commit
-            git diff --name-only HEAD~1 HEAD > /tmp/validation-reports/changed_files.txt 2>/dev/null || echo "" > /tmp/validation-reports/changed_files.txt
+            git diff --name-only HEAD~1 HEAD > /tmp/validation-reports/changed_files.txt 2>/dev/null
           fi
           echo "Changed JSON files:"
           cat /tmp/validation-reports/changed_files.txt
@@ -68,11 +68,10 @@ jobs:
         run: |
           mkdir -p /tmp/validation-reports
           python scripts/check_description_files.py \
-            --report-file /tmp/validation-reports/extension-validation-report.md \
-            --extension-descriptions-folder . \
-            $(cat /tmp/validation-reports/changed_files.txt | tr '\n' ' ')
+            $(cat /tmp/validation-reports/changed_files.txt | tr '\n' ' ') \
+            > /tmp/validation-reports/extension-validation-report.md
 
-      - name: Combine validation reports
+      - name: Combine validation reports and display summary
         if: always()
         run: |
           mkdir -p /tmp/validation-reports
@@ -87,10 +86,6 @@ jobs:
           else
             echo "❌ Extension validation report not generated" >> /tmp/validation-reports/validation-report.md
           fi
-
-      - name: Display validation summary
-        if: always()
-        run: |
           echo "## Validation Summary" >> $GITHUB_STEP_SUMMARY
           if [ -f /tmp/validation-reports/validation-report.md ]; then
             cat /tmp/validation-reports/validation-report.md >> $GITHUB_STEP_SUMMARY
@@ -108,7 +103,6 @@ jobs:
             /tmp/validation-reports/repository-structure-report.md
             /tmp/validation-reports/extension-validation-report.md
             /tmp/validation-reports/changed_files.txt
-            json_files.txt
           retention-days: 30
 
       - name: Comment PR with report

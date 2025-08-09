@@ -393,46 +393,18 @@ def print_categories(directory):
 def main():
     parser = argparse.ArgumentParser(
         description='Validate extension description files.')
-    parser.add_argument("--extension-descriptions-folder", help="Folder containing extension description files")
-    parser.add_argument("--report-file", help="Write report to markdown file")
     parser.add_argument("extension_description_files", nargs='*', help="Extension JSON files to validate")
     parser.add_argument("--print-categories", action='store_true',
-                        help="Print categories of extensions in the specified folder")
+                        help="Print categories of extensions in the specified folder and quit.")
     args = parser.parse_args()
 
     extension_descriptions_folder = "."
-    if args.extension_descriptions_folder:
-        extension_descriptions_folder = args.extension_descriptions_folder
 
     if args.print_categories:
         print_categories(extension_descriptions_folder)
         return 0
 
     success = True
-
-    if args.report_file:
-        if not args.report_file.endswith(".md"):
-            raise ValueError("Report file must have .md extension")
-        with open(args.report_file, 'w', encoding='utf-8') as f:
-            # Clear the report file
-            f.write("")
-
-    def _log_message(message, message_type=None):
-        plain_message_prefix = ""
-        markdown_message_prefix = ""
-        if message_type == "error":
-            plain_message_prefix = "FAIL: "
-            markdown_message_prefix = "- ❌ "
-        elif message_type == "warning":
-            plain_message_prefix = "WARNING: "
-            markdown_message_prefix = "- ⚠️ "
-        elif message_type == "success":
-            plain_message_prefix = "PASS: "
-            markdown_message_prefix = "- ✅ "
-        print(f"{plain_message_prefix}{message}")
-        if args.report_file:
-            with open(args.report_file, 'a', encoding='utf-8') as f:
-                f.write(f"{markdown_message_prefix}{message}\n")
 
     failed_extensions = set()
     for file_path in args.extension_description_files:
@@ -447,22 +419,22 @@ def main():
             print(f"Skipping {file_path} (not a file in the extensions descriptions folder)")
             continue
         extension_name = os.path.splitext(os.path.basename(file_path))[0]
-        _log_message(f"## Extension: {extension_name}")
+        print(f"## Extension: {extension_name}")
         try:
             metadata = parse_json(file_path)
             url = metadata.get("scm_url", "").strip()
             revision = metadata.get("scm_revision", "").strip()
-            _log_message(f"Repository URL: {url}\n")
+            print(f"Repository URL: {url}\n")
             if revision:
-                _log_message(f"Repository revision: {revision}\n")
+                print(f"Repository revision: {revision}\n")
 
             # Log the description file content for convenience
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 description_file_content = f.read()
-            _log_message(f"Extension description file content:\n```\n{description_file_content}\n```\n")
+            print(f"Extension description file content:\n```\n{description_file_content}\n```\n")
 
         except ExtensionParseError as exc:
-            _log_message(f"Failed to parse extension description file: {exc}", "error")
+            print(f"- :x: Failed to parse extension description file: {exc}")
             success = False
             failed_extensions.add(extension_name)
             continue
@@ -477,12 +449,12 @@ def main():
             if os.path.isfile(cmake_file_path):
                 with open(cmake_file_path, 'r', encoding='utf-8', errors='ignore') as f:
                     cmake_content = f.read()
-                _log_message(f"Top-level CMakeLists.txt content:\n```\n{cmake_content}\n```\n")
+                print(f"Top-level CMakeLists.txt content:\n```\n{cmake_content}\n```\n")
 
             # Log the LICENSE.txt file content
 
             license_file_path = None
-            license_file_names = ["LICENSE", "LICENCE", "License.txt", "license.txt", "LICENSE.txt" "COPYING", "COPYING.txt"]
+            license_file_names = ["LICENSE", "LICENCE", "License.txt", "license.txt", "LICENSE.txt", "COPYING", "COPYING.txt"]
             for license_file_name in license_file_names:
                 potential_path = os.path.join(cloned_repository_folder, license_file_name)
                 if os.path.isfile(potential_path):
@@ -496,21 +468,21 @@ def main():
                     license_filename = os.path.basename(license_file_path)
                     if len(license_content) > 1000:
                         license_content = license_content[:1000] + "...\n"
-                    _log_message(f"License file ({license_filename}) content:\n```\n{license_content}\n```\n")
+                    print(f"License file ({license_filename}) content:\n```\n{license_content}\n```\n")
                 except Exception as e:
-                    _log_message(f"Failed to read license file: {str(e)}", "error")
+                    print(f"- :x: Failed to read license file: {str(e)}")
                     success = False
                     failed_extensions.add(extension_name)
             else:
                 if extension_name in LICENSE_CHECK_EXCEPTIONS:
-                    _log_message(f"No license file found in {extension_name} repository root. This is a known issue - skipping check.", "warning")
+                    print(f"No license file found in {extension_name} repository root. This is a known issue - skipping check.", "warning")
                 else:
                     success = False
                     failed_extensions.add(extension_name)
-                    _log_message(f"No license file found in {extension_name} repository root", "error")
+                    print(f"- :x: No license file found in {extension_name} repository root")
 
         except ExtensionCheckError as exc:
-            _log_message(f"Failed to clone repository: {exc}", "error")
+            print(f"- :x: Failed to clone repository: {exc}")
             success = False
             failed_extensions.add(extension_name)
 
@@ -524,11 +496,11 @@ def main():
         for check_description, check, check_kwargs in extension_description_checks:
             try:
                 details = check(extension_name, metadata, **check_kwargs)
-                _log_message(f"{check_description} completed successfully", "success")
+                print(f"- :white_check_mark: {check_description} completed successfully")
                 if details:
-                    _log_message(details)
+                    print(details)
             except ExtensionCheckError as exc:
-                _log_message(f"{check_description} failed: {exc}", "error")
+                print(f"- :x: {check_description} failed: {exc}")
                 failed_extensions.add(extension_name)
                 success = False
 
@@ -540,17 +512,17 @@ def main():
                 print(f"Failed to clean up cloned repository folder: {cloned_repository_folder}")
 
     if args.extension_description_files and len(args.extension_description_files) > 1:
-        _log_message("## Extensions test summary")
-        _log_message(f"Checked {len(args.extension_description_files)} extension description files.")
+        print("## Extensions test summary")
+        print(f"Checked {len(args.extension_description_files)} extension description files.")
         if failed_extensions:
-            _log_message(f"Checks failed for {len(failed_extensions)} extensions: {', '.join(failed_extensions)}", "error")
+            print(f"- :x: Checks failed for {len(failed_extensions)} extensions: {', '.join(failed_extensions)}")
 
     try:
-        _log_message("## Extension dependencies")
+        print("## Extension dependencies")
         check_dependencies(extension_descriptions_folder)
-        _log_message("Dependency check completed successfully", "success")
+        print("- :white_check_mark: Dependency check completed successfully")
     except ExtensionDependencyError as exc:
-        _log_message(f"Dependency check failed: {exc}", "error")
+        print(f"- :x: Dependency check failed: {exc}")
         success = False
 
     return 0 if success else 1

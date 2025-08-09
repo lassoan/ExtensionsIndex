@@ -74,37 +74,20 @@ def check_filenames():
 def main():
     parser = argparse.ArgumentParser(
         description='Validate repository file structure.')
-    parser.add_argument("--output-format", choices=["console", "markdown"], default="console",
-                       help="Output format for the report")
     args = parser.parse_args()
 
     unexpected_files = check_filenames()
 
-    if args.output_format == "markdown":
-        # Generate markdown report
-        print(f"**Total unexpected files/directories found:** {len(unexpected_files)}\n")
+    print(f"Total unexpected files/directories found: {len(unexpected_files)}\n")
 
-        if not unexpected_files:
-            print(":white_check_mark: **Repository structure validation passed!**")
-            print("")
-            print("All files and directories in the repository follow the expected structure.")
-        else:
-            print(":x: **Repository structure issues found**")
-            print("")
-            print("The following unexpected files or directories were found:")
-            print("")
-            for unexpected_file in unexpected_files:
-                print(f"- :x: `{unexpected_file}`")
+    if not unexpected_files:
+        print(":white_check_mark: **Repository structure validation passed!**\n")
+        print("All files and directories in the repository follow the expected structure.")
     else:
-        # Console output
-        if unexpected_files:
-            print("Repository structure validation failed:")
-            for unexpected_file in unexpected_files:
-                print(f"  {unexpected_file}")
-        else:
-            print("Repository structure validation passed.")
-
-        print(f"Total unexpected files found: {len(unexpected_files)}")
+        print(":x: **Repository structure issues found**\n")
+        print("The following unexpected files or directories were found:\n")
+        for unexpected_file in unexpected_files:
+            print(f"- :x: `{unexpected_file}`")
 
     # Exit with error code if issues found
     sys.exit(len(unexpected_files))
