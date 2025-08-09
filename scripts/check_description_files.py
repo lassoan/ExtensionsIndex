@@ -7,11 +7,13 @@ Python 3.x CLI for validating extension description files with enhanced reportin
 import argparse
 import json
 import os
+import stat
+import tempfile
 import textwrap
+import time
 import urllib.parse as urlparse
 import subprocess
 import re
-import tempfile
 import shutil
 from datetime import datetime
 from functools import wraps
@@ -196,29 +198,65 @@ def check_git_repository_name(extension_name, metadata):
             """ % (
                 repo_name, repo_name, variations)))
 
-def clone_repository(scm_url, scm_revision):
+def safe_cleanup_directory(directory_path, max_attempts=3):
+    """Safely remove a directory with retries and permission handling."""
+    if not directory_path or not os.path.exists(directory_path):
+        return True
+    
+    def force_remove_readonly(func, path, exc_info):
+        """Error handler for Windows readonly files"""
+        try:
+            if os.path.exists(path):
+                os.chmod(path, stat.S_IWRITE)
+                func(path)
+        except Exception:
+            pass  # Ignore errors in the error handler
+    
+    for attempt in range(max_attempts):
+        try:
+            shutil.rmtree(directory_path, onexc=force_remove_readonly)
+            return True  # Success
+        except (OSError, PermissionError) as e:
+            if attempt < max_attempts - 1:
+                time.sleep(1)  # Wait longer before retrying
+                continue
+            else:
+                print(f"Warning: Failed to clean up directory after {max_attempts} attempts: {directory_path}")
+                print(f"Error: {e}")
+                return False
+        except Exception as e:
+            print(f"Warning: Unexpected error cleaning up directory: {directory_path}")
+            print(f"Error: {e}")
+            return False
+
+def check_clone_repository(extension_name, metadata, cloned_repository_folder):
     """Clone a git repository to a temporary directory."""
-    temp_dir = tempfile.mkdtemp(prefix="extension_check_")
+    scm_url = metadata.get("scm_url")
+    scm_revision = metadata.get("scm_revision")
+
+    print(f"Repository URL: {scm_url}\n")
+    if scm_revision:
+        print(f"Repository revision: {scm_revision}\n")
+
     try:
         if scm_revision:
             subprocess.run(
-                ['git', 'clone', scm_url, temp_dir],
+                ['git', 'clone', scm_url, cloned_repository_folder],
                 check=True, capture_output=True, text=True, timeout=300)
             subprocess.run(
                 ['git', 'checkout', scm_revision],
-                cwd=temp_dir,
+                cwd=cloned_repository_folder,
                 check=True, capture_output=True, text=True, timeout=300)
         else:
             subprocess.run(
-                ['git', 'clone', '--depth', '1', scm_url, temp_dir],
+                ['git', 'clone', '--depth', '1', scm_url, cloned_repository_folder],
                 check=True, capture_output=True, text=True, timeout=600)
-        return temp_dir
     except subprocess.TimeoutExpired as e:
-        raise ExtensionCheckError("unknown", "clone_repository", f"Git clone operation timed out: {e}")
+        raise ExtensionCheckError(extension_name, "clone_repository", f"Git clone operation timed out: {e}")
     except subprocess.CalledProcessError as e:
-        raise ExtensionCheckError("unknown", "clone_repository", f"Failed to clone repository: {e.stderr.strip() if e.stderr else 'Unknown git error'}")
+        raise ExtensionCheckError(extension_name, "clone_repository", f"Failed to clone repository: {e.stderr.strip() if e.stderr else 'Unknown git error'}")
     except FileNotFoundError:
-        raise ExtensionCheckError("unknown", "clone_repository", "Git command not found. Please ensure git is installed and in PATH")
+        raise ExtensionCheckError(extension_name, "clone_repository", "Git command not found. Please ensure git is installed and in PATH")
 
 def check_cmakelists_content(extension_name, metadata, cloned_repository_folder=None):
     """Check if the top-level CMakeLists.txt file project name matches the extension name."""
@@ -243,6 +281,9 @@ def check_cmakelists_content(extension_name, metadata, cloned_repository_folder=
         raise ExtensionCheckError(
             extension_name, check_name,
             f"Failed to read CMakeLists.txt: {str(e)}")
+
+    # Log the top-level CMakeLists.txt file content
+    print(f"Top-level CMakeLists.txt content:\n```\n{cmake_content}\n```\n")
 
     extension_name_in_cmake = None
 
@@ -329,6 +370,29 @@ def check_cmakelists_content(extension_name, metadata, cloned_repository_folder=
                 extension_name, check_name,
                 f"Failed to download screenshot from EXTENSION_SCREENSHOTURLS '{url}': {str(e)}")
 
+def check_license_file(extension_name, metadata, cloned_repository_folder):
+    # Find license file
+    license_file_path = None
+    license_file_names = ["LICENSE", "LICENCE", "License.txt", "license.txt", "LICENSE.txt", "COPYING", "COPYING.txt"]
+    for license_file_name in license_file_names:
+        potential_path = os.path.join(cloned_repository_folder, license_file_name)
+        if os.path.isfile(potential_path):
+            license_file_path = potential_path
+            break
+    if not license_file_path:
+        if extension_name in LICENSE_CHECK_EXCEPTIONS:
+            print(f"- :warning: No license file found in {extension_name} repository root. This is a known issue - skipping check.")
+            return
+        raise ExtensionCheckError(
+            extension_name, "check_license_file",
+            "No license file found in repository root.")
+    # Print the LICENSE.txt file content
+    with open(license_file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        license_content = f.read()
+    if len(license_content) > 1000:
+        license_content = license_content[:1000] + "...\n"
+    return f"License file ({os.path.basename(license_file_path)}) content:\n```\n{license_content}\n```\n"
+
 def check_dependencies(directory):
     import os
     required_extensions = {}  # for each extension it contains a list of extensions that require it
@@ -404,94 +468,51 @@ def main():
         print_categories(extension_descriptions_folder)
         return 0
 
+    print("# Check extension description files\n")
+
     success = True
 
     failed_extensions = set()
+    found_extensions = []
     for file_path in args.extension_description_files:
+        
+        # Get extension name and desctiption file path
         file_extension = os.path.splitext(file_path)[1]
         if file_extension != '.json':
             # not an extension description file, ignore it
-            print(f"Skipping {file_path} (not a .json file)")
             continue
         full_path = os.path.join(extension_descriptions_folder, file_path)
         if not os.path.isfile(full_path):
             # not a file in the extensions descriptions folder, ignore it
-            print(f"Skipping {file_path} (not a file in the extensions descriptions folder)")
             continue
         extension_name = os.path.splitext(os.path.basename(file_path))[0]
+        found_extensions.append(extension_name)
+        
         print(f"## Extension: {extension_name}")
+
+        # Log the description file content for convenience
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            description_file_content = f.read()
+        print(f"Extension description file content:\n```\n{description_file_content}\n```\n")
+
         try:
             metadata = parse_json(file_path)
-            url = metadata.get("scm_url", "").strip()
-            revision = metadata.get("scm_revision", "").strip()
-            print(f"Repository URL: {url}\n")
-            if revision:
-                print(f"Repository revision: {revision}\n")
-
-            # Log the description file content for convenience
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                description_file_content = f.read()
-            print(f"Extension description file content:\n```\n{description_file_content}\n```\n")
-
         except ExtensionParseError as exc:
             print(f"- :x: Failed to parse extension description file: {exc}")
             success = False
             failed_extensions.add(extension_name)
             continue
 
-        cloned_repository_folder = None
-        try:
-            cloned_repository_folder = clone_repository(metadata["scm_url"], metadata.get("scm_revision", ""))
-            print(f"Cloned repository to {cloned_repository_folder}")
-
-            # Log the top-level CMakeLists.txt file content
-            cmake_file_path = os.path.join(cloned_repository_folder, "CMakeLists.txt")
-            if os.path.isfile(cmake_file_path):
-                with open(cmake_file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    cmake_content = f.read()
-                print(f"Top-level CMakeLists.txt content:\n```\n{cmake_content}\n```\n")
-
-            # Log the LICENSE.txt file content
-
-            license_file_path = None
-            license_file_names = ["LICENSE", "LICENCE", "License.txt", "license.txt", "LICENSE.txt", "COPYING", "COPYING.txt"]
-            for license_file_name in license_file_names:
-                potential_path = os.path.join(cloned_repository_folder, license_file_name)
-                if os.path.isfile(potential_path):
-                    license_file_path = potential_path
-                    break
-
-            if license_file_path:
-                try:
-                    with open(license_file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                        license_content = f.read()
-                    license_filename = os.path.basename(license_file_path)
-                    if len(license_content) > 1000:
-                        license_content = license_content[:1000] + "...\n"
-                    print(f"License file ({license_filename}) content:\n```\n{license_content}\n```\n")
-                except Exception as e:
-                    print(f"- :x: Failed to read license file: {str(e)}")
-                    success = False
-                    failed_extensions.add(extension_name)
-            else:
-                if extension_name in LICENSE_CHECK_EXCEPTIONS:
-                    print(f"No license file found in {extension_name} repository root. This is a known issue - skipping check.", "warning")
-                else:
-                    success = False
-                    failed_extensions.add(extension_name)
-                    print(f"- :x: No license file found in {extension_name} repository root")
-
-        except ExtensionCheckError as exc:
-            print(f"- :x: Failed to clone repository: {exc}")
-            success = False
-            failed_extensions.add(extension_name)
+        cloned_repository_folder = tempfile.mkdtemp(prefix=f"extension_check_{extension_name}_")
 
         extension_description_checks = [
+            ("Clone repository", check_clone_repository, {"cloned_repository_folder": cloned_repository_folder}),
             ("Check JSON schema", check_json_schema, {}),
             ("Check category", check_category, {}),
             ("Check git repository name", check_git_repository_name, {}),
             ("Check SCM URL syntax", check_scm_url_syntax, {}),
             ("Check CMakeLists.txt content", check_cmakelists_content, {"cloned_repository_folder": cloned_repository_folder}),
+            ("Check license file", check_license_file, {"cloned_repository_folder": cloned_repository_folder}),
             ]
         for check_description, check, check_kwargs in extension_description_checks:
             try:
@@ -505,15 +526,14 @@ def main():
                 success = False
 
         # Clean up temporary directory
-        if cloned_repository_folder and os.path.exists(cloned_repository_folder):
-            try:
-                shutil.rmtree(cloned_repository_folder)
-            except Exception:
-                print(f"Failed to clean up cloned repository folder: {cloned_repository_folder}")
+        if cloned_repository_folder:
+            success_cleanup = safe_cleanup_directory(cloned_repository_folder)
+            if not success_cleanup:
+                print(f"Note: Temporary directory may still exist: {cloned_repository_folder}")
 
-    if args.extension_description_files and len(args.extension_description_files) > 1:
+    if len(found_extensions) > 1:
         print("## Extensions test summary")
-        print(f"Checked {len(args.extension_description_files)} extension description files.")
+        print(f"Checked {len(found_extensions)} extension description files.")
         if failed_extensions:
             print(f"- :x: Checks failed for {len(failed_extensions)} extensions: {', '.join(failed_extensions)}")
 

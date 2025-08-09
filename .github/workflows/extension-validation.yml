@@ -86,7 +86,6 @@ jobs:
           else
             echo "❌ Extension validation report not generated" >> /tmp/validation-reports/validation-report.md
           fi
-          echo "## Validation Summary" >> $GITHUB_STEP_SUMMARY
           if [ -f /tmp/validation-reports/validation-report.md ]; then
             cat /tmp/validation-reports/validation-report.md >> $GITHUB_STEP_SUMMARY
           else

@@ -78,6 +78,8 @@ def main():
 
     unexpected_files = check_filenames()
 
+    print("# Check repository structure\n")
+
     print(f"Total unexpected files/directories found: {len(unexpected_files)}\n")
 
     if not unexpected_files:
