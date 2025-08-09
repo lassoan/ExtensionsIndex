@@ -168,10 +168,10 @@ jobs:
           echo "Checking validation results..."
           STRUCTURE_RESULT="${{ steps.structure-validation.outcome }}"
           EXTENSION_RESULT="${{ steps.extension-validation.outcome }}"
-          
+
           echo "Repository structure validation: $STRUCTURE_RESULT"
           echo "Extension validation: $EXTENSION_RESULT"
-          
+
           if [ "$STRUCTURE_RESULT" != "success" ] || [ "$EXTENSION_RESULT" != "success" ]; then
             echo "❌ One or more validation steps failed"
             exit 1
