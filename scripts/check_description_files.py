@@ -484,7 +484,7 @@ def main():
                         license_content = f.read()
                     license_filename = os.path.basename(license_file_path)
                     if len(license_content) > 1000:
-                        license_content = license_content[:1000] + "\n...\n"
+                        license_content = license_content[:1000] + "...\n"
                     _log_message(f"License file ({license_filename}) content:\n```\n{license_content}\n```\n")
                 except Exception as e:
                     _log_message(f"Failed to read license file: {str(e)}", "error")
@@ -492,11 +492,11 @@ def main():
                     failed_extensions.add(extension_name)
             else:
                 if extension_name in LICENSE_CHECK_EXCEPTIONS:
-                    _log_message(f"No license file found in repository root, but it is an exception for {extension_name}", "warning")
+                    _log_message(f"No license file found in {extension_name} repository root. This is a known issue - skipping check.", "warning")
+                else:
                     success = False
                     failed_extensions.add(extension_name)
-                else:
-                    _log_message("No license file found in repository root", "error")
+                    _log_message(f"No license file found in {extension_name} repository root", "error")
 
         except ExtensionCheckError as exc:
             _log_message(f"Failed to clone repository: {exc}", "error")
@@ -607,7 +607,7 @@ REPOSITORY_NAME_CHECK_EXCEPTIONS = [
 
 LICENSE_CHECK_EXCEPTIONS = [
     "AirwaySegmentation",
-    "ai-assisted-annotation-client",
+    "AnglePlanesExtension",
 ]
 ACCEPTED_EXTENSION_CATEGORIES = [
     "Active Learning",
